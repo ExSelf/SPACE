@@ -1,1 +1,1 @@
-# SPACE is short for Svetlitsa Proprietary Application for Command and Execution
+SPACE is short for Svetlitsa Proprietary Application for Command and Execution
