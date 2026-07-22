@@ -1,7 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
 from typing import Optional
 
 import mido
@@ -35,7 +34,7 @@ def midi_to_packet(message: mido.Message) -> Packet | None:
 
 
 class BridgeApp:
-    """A desktop app that listens for MIDI and forwards it to an ESP32 over USB serial."""
+    """A small desktop app that bridges MIDI commands to an ESP32 over USB."""
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -50,6 +49,8 @@ class BridgeApp:
         self._populate_ports()
 
     def _build_ui(self) -> None:
+        from tkinter import ttk
+
         container = ttk.Frame(self.root, padding=12)
         container.pack(fill=tk.BOTH, expand=True)
 
