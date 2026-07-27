@@ -30,16 +30,24 @@ class SerialLink:
                 raise RuntimeError("No serial ports detected")
             self.port = ports[0]
 
-        self._serial = serial.Serial(self.port, self.baud_rate, timeout=0.1)
+        try:
+            self._serial = serial.Serial(self.port, self.baud_rate, timeout=0.1)
+        except Exception as exc:  # pragma: no cover - runtime environment specific
+            self._serial = None
+            raise RuntimeError(f"Unable to open serial port {self.port}: {exc}") from exc
+
         print(f"Serial link open on {self.port} at {self.baud_rate} baud")
+
+    def is_open(self) -> bool:
+        return self._serial is not None and self._serial.is_open
 
     def send(self, packet) -> None:
         """Send a packet to the serial device."""
         if self.on_packet is not None:
             self.on_packet(packet)
 
-        if self._serial is None:
-            raise RuntimeError("Serial link is not open")
+        if not self.is_open():
+            return
 
         payload = packet.to_wire_payload() + b"\n"
         self._serial.write(payload)

@@ -84,14 +84,26 @@ class BridgeApp:
 
         if midi_ports:
             self.midi_var.set(midi_ports[0])
+        elif self.midi_var.get() not in {"", "(no MIDI ports)"}:
+            self.midi_var.set("(no MIDI ports)")
+        else:
+            self.midi_var.set("(no MIDI ports)")
+
         if serial_ports:
             self.serial_var.set(serial_ports[0])
+        elif self.serial_var.get() not in {"", "(no serial ports)"}:
+            self.serial_var.set("(no serial ports)")
+        else:
+            self.serial_var.set("(no serial ports)")
 
     def _log(self, message: str) -> None:
         self.log_text.configure(state="normal")
         self.log_text.insert(tk.END, message + "\n")
         self.log_text.see(tk.END)
         self.log_text.configure(state="disabled")
+
+    def _schedule_log(self, message: str) -> None:
+        self.root.after(0, lambda: self._log(message))
 
     def start_bridge(self) -> None:
         if self.running:
@@ -103,16 +115,24 @@ class BridgeApp:
 
         midi_port = self.midi_var.get() if self.midi_var.get() not in {"", "(no MIDI ports)"} else None
         serial_port = self.serial_var.get() if self.serial_var.get() not in {"", "(no serial ports)"} else None
+        if midi_port is None:
+            self._log("No MIDI input ports were detected. Install the RTMidi backend or use a MIDI device that exposes an input port.")
 
         self.serial_link = SerialLink(serial_port, config.BAUD_RATE)
         self.serial_link.on_packet = self._on_status_packet
-        self.serial_link.open()
+        try:
+            self.serial_link.open()
+            self._log("Serial link ready.")
+        except Exception as exc:
+            self._log(f"Serial link unavailable: {exc}")
+            self.serial_link = None
 
         def handle_midi(message: mido.Message) -> None:
             packet = midi_to_packet(message)
             if packet is not None:
-                self._log(f"MIDI {message.type} -> node {packet.node} cmd {packet.command}")
-                self.serial_link.send(packet)
+                self._schedule_log(f"MIDI {message.type} -> node {packet.node} cmd {packet.command}")
+                if self.serial_link is not None:
+                    self.serial_link.send(packet)
 
         self.midi_input = MidiInput(midi_port, handle_midi)
         self.midi_input.open()
@@ -131,7 +151,7 @@ class BridgeApp:
         self._log("Bridge stopped.")
 
     def _on_status_packet(self, packet: Packet) -> None:
-        self._log(f"Packet sent to ESP32: node={packet.node} command={packet.command}")
+        self._schedule_log(f"Packet sent to ESP32: node={packet.node} command={packet.command}")
 
 
 def main() -> None:
