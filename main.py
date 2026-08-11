@@ -58,6 +58,7 @@ class BridgeWindow(QtWidgets.QWidget):
         super().__init__()
         self.setWindowTitle("SPACE MIDI Bridge")
         self.resize(900, 700)
+        self.setMinimumSize(760, 560)
 
         self.midi_input: Optional[MidiInput] = None
         self.serial_link: Optional[SerialLink] = None
@@ -304,7 +305,26 @@ def main() -> None:
         app.setPalette(palette)
 
     app.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps)
+
+    font = QtGui.QFont()
+    font.setFamily("SF Pro Text,Segoe UI,Helvetica Neue,Arial,sans-serif")
+    font.setPointSize(10)
+    app.setFont(font)
+
+    app.setStyleSheet(
+        """
+        QWidget {
+            font-family: Segoe UI, Arial, sans-serif;
+            font-size: 9pt;
+        }
+        QPushButton, QComboBox, QTextEdit, QTreeWidget, QGroupBox, QCheckBox {
+            font-family: Segoe UI, Arial, sans-serif;
+        }
+        """
+    )
+
     window = BridgeWindow()
+    window.setObjectName("BridgeWindow")
     window.show()
     app.exec()
 
