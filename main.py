@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
-import sys
+import os
+import tkinter as tk
 from pathlib import Path
 from typing import Optional
 
@@ -16,13 +17,13 @@ from space.serial_link import SerialLink
 
 def midi_to_packet(message: mido.Message) -> Packet | None:
     """Translate one MIDI message into a command Packet."""
-    if message.type in ("note_on", "note_off"):
+    if message.type == "note_on":
         node = message.channel + 1
         return Packet(
             type=TYPE_COMMAND,
             node=node,
             command=message.note,
-            parameter=message.velocity if message.type == "note_on" else 0,
+            parameter=message.velocity,
         )
     if message.type == "control_change":
         node = message.channel + 1
@@ -38,8 +39,8 @@ def midi_to_packet(message: mido.Message) -> Packet | None:
 
 def midi_to_registry_update(message: mido.Message) -> tuple[int, int, int] | None:
     """Convert a MIDI message into the values applied to all matching nodes."""
-    if message.type in ("note_on", "note_off"):
-        return message.channel, message.note, message.velocity if message.type == "note_on" else 0
+    if message.type == "note_on":
+        return message.channel, message.note, message.velocity
     if message.type == "control_change":
         return message.channel, message.control, message.value
     return None
@@ -59,6 +60,7 @@ class BridgeWindow(QtWidgets.QWidget):
         self.midi_input: Optional[MidiInput] = None
         self.serial_link: Optional[SerialLink] = None
         self.running = False
+        self.start_time: Optional[float] = None
         self.settings_path = Path(__file__).with_name("node_settings.json")
         self.node_registry = NodeRegistry(initialize_default_nodes=False)
         self.node_registry.load_from_file(self.settings_path)
@@ -214,10 +216,17 @@ class BridgeWindow(QtWidgets.QWidget):
         if packet is not None and self.serial_link is not None:
             self.serial_link.send(packet)
 
+    def _get_elapsed_ms(self) -> int:
+        """Get elapsed time in milliseconds since bridge start."""
+        if self.start_time is None:
+            return 0
+        return int((time.time() - self.start_time) * 1000)
+
     def start_bridge(self) -> None:
         if self.running:
             return
 
+        self.start_time = time.time()
         self._log("Starting bridge...")
         self.running = True
         self.start_button.setEnabled(False)
@@ -241,7 +250,19 @@ class BridgeWindow(QtWidgets.QWidget):
             self._log(f"Serial link unavailable: {exc}")
             self.serial_link = None
 
-        self.midi_input = MidiInput(midi_port, self._on_midi_message)
+        def handle_midi(message: mido.Message) -> None:
+            packet = midi_to_packet(message)
+            update = midi_to_registry_update(message)
+            if update is not None:
+                channel, command, parameter = update
+                self.node_registry.apply_midi_message(channel=channel, command=command, parameter=parameter)
+                self._refresh_node_view()
+                self._schedule_log(f"MIDI {message.type} -> channel {channel} cmd {command} param {parameter}")
+            if packet is not None:
+                if self.serial_link is not None:
+                    self.serial_link.send(packet)
+
+        self.midi_input = MidiInput(midi_port, handle_midi)
         self.midi_input.open()
         self._log("Bridge running. Waiting for MIDI input...")
 
@@ -257,7 +278,7 @@ class BridgeWindow(QtWidgets.QWidget):
         self._log("Bridge stopped.")
 
     def _on_status_packet(self, packet: Packet) -> None:
-        self._schedule_log(f"Packet sent to ESP32: node={packet.node} command={packet.command}")
+        pass
 
 
 BridgeApp = BridgeWindow
