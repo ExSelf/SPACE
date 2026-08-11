@@ -18,6 +18,9 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+## Qt UI
+This project now uses PySide6 Qt Widgets for the desktop interface.
+
 ## Build a standalone app
 On macOS and Windows, build with PyInstaller:
 

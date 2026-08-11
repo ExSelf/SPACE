@@ -2,7 +2,7 @@
   "nodes": [
     {
       "number": 1,
-      "name": "Dummy Node",
+      "name": "Node 1",
       "listen_channels": [
         true,
         true,

@@ -1,12 +1,11 @@
 ﻿from __future__ import annotations
 
-import os
-import tkinter as tk
+import sys
 from pathlib import Path
-from tkinter import ttk
 from typing import Optional
 
 import mido
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from space import config
 from space.midi_input import MidiInput, list_input_ports
@@ -46,13 +45,16 @@ def midi_to_registry_update(message: mido.Message) -> tuple[int, int, int] | Non
     return None
 
 
-class BridgeApp:
+class BridgeWindow(QtWidgets.QWidget):
     """A desktop app that listens for MIDI and forwards it to an ESP32 over USB serial."""
 
-    def __init__(self, root: tk.Tk) -> None:
-        self.root = root
-        self.root.title("SPACE MIDI Bridge")
-        self.root.geometry("900x700")
+    log_message = QtCore.Signal(str)
+    midi_message_received = QtCore.Signal(object)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("SPACE MIDI Bridge")
+        self.resize(900, 700)
 
         self.midi_input: Optional[MidiInput] = None
         self.serial_link: Optional[SerialLink] = None
@@ -61,135 +63,156 @@ class BridgeApp:
         self.node_registry = NodeRegistry(initialize_default_nodes=False)
         self.node_registry.load_from_file(self.settings_path)
 
+        self.log_message.connect(self._log)
+        self.midi_message_received.connect(self._process_midi)
+
         self._build_ui()
         self._populate_ports()
         self._refresh_node_view()
 
     def _build_ui(self) -> None:
-        container = ttk.Frame(self.root, padding=12)
-        container.pack(fill=tk.BOTH, expand=True)
+        layout = QtWidgets.QGridLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
-        ttk.Label(container, text="MIDI input").grid(row=0, column=0, sticky="w")
-        self.midi_var = tk.StringVar()
-        self.midi_combo = ttk.Combobox(container, textvariable=self.midi_var, state="readonly")
-        self.midi_combo.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=(0, 8))
+        layout.addWidget(QtWidgets.QLabel("MIDI input"), 0, 0, QtCore.Qt.AlignLeft)
+        self.midi_combo = QtWidgets.QComboBox()
+        self.midi_combo.setEditable(False)
+        layout.addWidget(self.midi_combo, 0, 1)
 
-        ttk.Label(container, text="Serial port").grid(row=1, column=0, sticky="w")
-        self.serial_var = tk.StringVar()
-        self.serial_combo = ttk.Combobox(container, textvariable=self.serial_var, state="readonly")
-        self.serial_combo.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=(0, 8))
+        layout.addWidget(QtWidgets.QLabel("Serial port"), 1, 0, QtCore.Qt.AlignLeft)
+        self.serial_combo = QtWidgets.QComboBox()
+        self.serial_combo.setEditable(False)
+        layout.addWidget(self.serial_combo, 1, 1)
 
-        button_row = ttk.Frame(container)
-        button_row.grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 12))
-        self.start_button = ttk.Button(button_row, text="Start", command=self.start_bridge)
-        self.start_button.pack(side=tk.LEFT)
-        ttk.Button(button_row, text="Stop", command=self.stop_bridge).pack(side=tk.LEFT, padx=(8, 0))
+        button_row = QtWidgets.QWidget()
+        button_layout = QtWidgets.QHBoxLayout(button_row)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        button_layout.setSpacing(8)
+        self.start_button = QtWidgets.QPushButton("Start")
+        self.start_button.clicked.connect(self.start_bridge)
+        button_layout.addWidget(self.start_button)
+        self.stop_button = QtWidgets.QPushButton("Stop")
+        self.stop_button.clicked.connect(self.stop_bridge)
+        button_layout.addWidget(self.stop_button)
+        layout.addWidget(button_row, 2, 0, 1, 2, QtCore.Qt.AlignLeft)
 
-        self.log_text = tk.Text(container, height=10, wrap=tk.WORD)
-        self.log_text.grid(row=3, column=0, columnspan=2, sticky="nsew")
-        self.log_text.configure(state="disabled")
+        self.log_text = QtWidgets.QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMinimumHeight(140)
+        layout.addWidget(self.log_text, 3, 0, 1, 2)
 
-        self.node_tree = ttk.Treeview(container, columns=("number", "name", "address", "command", "actual_command", "parameter", "actual_parameter", "voltage", "charge"), show="headings")
-        self.node_tree.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
-        self.node_tree.heading("number", text="Node")
-        self.node_tree.heading("name", text="Name")
-        self.node_tree.heading("address", text="Address")
-        self.node_tree.heading("command", text="Cmd")
-        self.node_tree.heading("actual_command", text="Actual Cmd")
-        self.node_tree.heading("parameter", text="Param")
-        self.node_tree.heading("actual_parameter", text="Actual Param")
-        self.node_tree.heading("voltage", text="Voltage")
-        self.node_tree.heading("charge", text="Charge")
-        self.node_tree.bind("<<TreeviewSelect>>", self._on_node_selected)
+        self.node_tree = QtWidgets.QTreeWidget()
+        self.node_tree.setColumnCount(9)
+        self.node_tree.setHeaderLabels([
+            "Node",
+            "Name",
+            "Address",
+            "Cmd",
+            "Actual Cmd",
+            "Param",
+            "Actual Param",
+            "Voltage",
+            "Charge",
+        ])
+        self.node_tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.node_tree.setAlternatingRowColors(True)
+        self.node_tree.itemSelectionChanged.connect(self._on_node_selected)
+        self.node_tree.header().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        layout.addWidget(self.node_tree, 4, 0, 1, 2)
 
-        self.channel_panel = ttk.LabelFrame(container, text="Node channels")
-        self.channel_panel.grid(row=5, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
-        self.channel_vars: list[tk.BooleanVar] = []
+        self.channel_panel = QtWidgets.QGroupBox("Node channels")
+        channel_layout = QtWidgets.QGridLayout()
+        self.channel_vars: list[QtWidgets.QCheckBox] = []
         for index in range(16):
-            var = tk.BooleanVar()
-            self.channel_vars.append(var)
-            ttk.Checkbutton(self.channel_panel, text=f"Ch {index + 1}", variable=var, command=self._save_selected_node_channels).grid(row=index // 8, column=index % 8, padx=6, pady=4, sticky="w")
+            checkbox = QtWidgets.QCheckBox(f"Ch {index + 1}")
+            checkbox.toggled.connect(self._save_selected_node_channels)
+            self.channel_vars.append(checkbox)
+            channel_layout.addWidget(checkbox, index // 8, index % 8)
+        self.channel_panel.setLayout(channel_layout)
+        layout.addWidget(self.channel_panel, 5, 0, 1, 2)
 
-        container.columnconfigure(1, weight=1)
-        container.rowconfigure(3, weight=1)
-        container.rowconfigure(4, weight=1)
-        container.rowconfigure(5, weight=1)
+        layout.setRowStretch(3, 1)
+        layout.setRowStretch(4, 2)
+        layout.setRowStretch(5, 1)
+        layout.setColumnStretch(1, 1)
 
     def _populate_ports(self) -> None:
         midi_ports = list_input_ports()
         serial_ports = SerialLink.list_ports()
-        self.midi_combo["values"] = midi_ports or ["(no MIDI ports)"]
-        self.serial_combo["values"] = serial_ports or ["(no serial ports)"]
+
+        self.midi_combo.clear()
+        self.serial_combo.clear()
+
+        self.midi_combo.addItems(midi_ports or ["(no MIDI ports)"])
+        self.serial_combo.addItems(serial_ports or ["(no serial ports)"])
 
         if midi_ports:
-            self.midi_var.set(midi_ports[0])
-        elif self.midi_var.get() not in {"", "(no MIDI ports)"}:
-            self.midi_var.set("(no MIDI ports)")
-        else:
-            self.midi_var.set("(no MIDI ports)")
-
+            self.midi_combo.setCurrentIndex(0)
         if serial_ports:
-            self.serial_var.set(serial_ports[0])
-        elif self.serial_var.get() not in {"", "(no serial ports)"}:
-            self.serial_var.set("(no serial ports)")
-        else:
-            self.serial_var.set("(no serial ports)")
+            self.serial_combo.setCurrentIndex(0)
 
     def _refresh_node_view(self) -> None:
-        for item in self.node_tree.get_children():
-            self.node_tree.delete(item)
-
+        self.node_tree.clear()
         for node in self.node_registry.nodes:
-            self.node_tree.insert(
-                "",
-                tk.END,
-                values=(
-                    node.number,
+            item = QtWidgets.QTreeWidgetItem(
+                [
+                    str(node.number),
                     node.name,
                     node.address,
-                    node.command,
-                    node.actual_command,
-                    node.parameter,
-                    node.actual_parameter,
-                    node.voltage,
-                    node.charge,
-                ),
+                    str(node.command),
+                    str(node.actual_command),
+                    str(node.parameter),
+                    str(node.actual_parameter),
+                    str(node.voltage),
+                    str(node.charge),
+                ]
             )
+            self.node_tree.addTopLevelItem(item)
 
-    def _on_node_selected(self, _event: tk.Event | None = None) -> None:
+    def _on_node_selected(self) -> None:
         selected_node = self._get_selected_node()
         if selected_node is None:
             return
-        for index, var in enumerate(self.channel_vars):
-            var.set(selected_node.listen_channels[index])
+        for index, checkbox in enumerate(self.channel_vars):
+            checkbox.blockSignals(True)
+            checkbox.setChecked(selected_node.listen_channels[index])
+            checkbox.blockSignals(False)
 
     def _save_selected_node_channels(self) -> None:
         selected_node = self._get_selected_node()
         if selected_node is None:
             return
-        selected_node.listen_channels = [var.get() for var in self.channel_vars]
+        selected_node.listen_channels = [checkbox.isChecked() for checkbox in self.channel_vars]
         self.node_registry.save_to_file(self.settings_path)
         self._refresh_node_view()
 
     def _get_selected_node(self) -> NodeState | None:
-        selection = self.node_tree.selection()
-        if not selection:
+        items = self.node_tree.selectedItems()
+        if not items:
             return None
-        item_id = selection[0]
-        item_values = self.node_tree.item(item_id, "values")
-        if not item_values:
-            return None
-        node_number = int(item_values[0])
+        node_number = int(items[0].text(0))
         return next((candidate for candidate in self.node_registry.nodes if candidate.number == node_number), None)
 
     def _log(self, message: str) -> None:
-        self.log_text.configure(state="normal")
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END)
-        self.log_text.configure(state="disabled")
+        self.log_text.append(message)
 
     def _schedule_log(self, message: str) -> None:
-        self.root.after(0, lambda: self._log(message))
+        self.log_message.emit(message)
+
+    def _on_midi_message(self, message: mido.Message) -> None:
+        self.midi_message_received.emit(message)
+
+    def _process_midi(self, message: mido.Message) -> None:
+        packet = midi_to_packet(message)
+        update = midi_to_registry_update(message)
+        if update is not None:
+            channel, command, parameter = update
+            self.node_registry.apply_midi_message(channel=channel, command=command, parameter=parameter)
+            self._refresh_node_view()
+            self._schedule_log(f"MIDI {message.type} -> channel {channel} cmd {command} param {parameter}")
+        if packet is not None and self.serial_link is not None:
+            self.serial_link.send(packet)
 
     def start_bridge(self) -> None:
         if self.running:
@@ -197,12 +220,17 @@ class BridgeApp:
 
         self._log("Starting bridge...")
         self.running = True
-        self.start_button.config(state=tk.DISABLED)
+        self.start_button.setEnabled(False)
 
-        midi_port = self.midi_var.get() if self.midi_var.get() not in {"", "(no MIDI ports)"} else None
-        serial_port = self.serial_var.get() if self.serial_var.get() not in {"", "(no serial ports)"} else None
-        if midi_port is None:
-            self._log("No MIDI input ports were detected. Install the RTMidi backend or use a MIDI device that exposes an input port.")
+        midi_port = self.midi_combo.currentText()
+        serial_port = self.serial_combo.currentText()
+        if midi_port in {"", "(no MIDI ports)"}:
+            midi_port = None
+            self._log(
+                "No MIDI input ports were detected. Install the RTMidi backend or use a MIDI device that exposes an input port."
+            )
+        if serial_port in {"", "(no serial ports)"}:
+            serial_port = None
 
         self.serial_link = SerialLink(serial_port, config.BAUD_RATE)
         self.serial_link.on_packet = self._on_status_packet
@@ -213,28 +241,15 @@ class BridgeApp:
             self._log(f"Serial link unavailable: {exc}")
             self.serial_link = None
 
-        def handle_midi(message: mido.Message) -> None:
-            packet = midi_to_packet(message)
-            update = midi_to_registry_update(message)
-            if update is not None:
-                channel, command, parameter = update
-                self.node_registry.apply_midi_message(channel=channel, command=command, parameter=parameter)
-                self._refresh_node_view()
-                self._schedule_log(f"MIDI {message.type} -> channel {channel} cmd {command} param {parameter}")
-            if packet is not None:
-                if self.serial_link is not None:
-                    self.serial_link.send(packet)
-
-        self.midi_input = MidiInput(midi_port, handle_midi)
+        self.midi_input = MidiInput(midi_port, self._on_midi_message)
         self.midi_input.open()
-
         self._log("Bridge running. Waiting for MIDI input...")
 
     def stop_bridge(self) -> None:
         if not self.running:
             return
         self.running = False
-        self.start_button.config(state=tk.NORMAL)
+        self.start_button.setEnabled(True)
         if self.midi_input is not None:
             self.midi_input.close()
         if self.serial_link is not None:
@@ -245,10 +260,30 @@ class BridgeApp:
         self._schedule_log(f"Packet sent to ESP32: node={packet.node} command={packet.command}")
 
 
+BridgeApp = BridgeWindow
+
+
 def main() -> None:
-    root = tk.Tk()
-    app = BridgeApp(root)
-    root.mainloop()
+    app = QtWidgets.QApplication([])
+    if sys.platform == "darwin":
+        app.setStyle("macintosh")
+    else:
+        app.setStyle("Fusion")
+        palette = QtGui.QPalette()
+        palette.setColor(QtGui.QPalette.Window, QtGui.QColor("#f2f2f2"))
+        palette.setColor(QtGui.QPalette.Base, QtGui.QColor("#ffffff"))
+        palette.setColor(QtGui.QPalette.AlternateBase, QtGui.QColor("#f2f2f2"))
+        palette.setColor(QtGui.QPalette.Text, QtGui.QColor("#1d1d1f"))
+        palette.setColor(QtGui.QPalette.Button, QtGui.QColor("#e8e8ec"))
+        palette.setColor(QtGui.QPalette.ButtonText, QtGui.QColor("#1d1d1f"))
+        palette.setColor(QtGui.QPalette.Highlight, QtGui.QColor("#007aff"))
+        palette.setColor(QtGui.QPalette.HighlightedText, QtGui.QColor("#ffffff"))
+        app.setPalette(palette)
+
+    app.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps)
+    window = BridgeWindow()
+    window.show()
+    app.exec()
 
 
 if __name__ == "__main__":

@@ -13,12 +13,23 @@ class DummyButton:
     def config(self, **kwargs) -> None:
         self.state = kwargs.get("state")
 
+    def setEnabled(self, enabled: bool) -> None:
+        self.state = enabled
+
 
 class DummyVar:
     def __init__(self, value: str = "") -> None:
         self.value = value
 
     def get(self) -> str:
+        return self.value
+
+
+class DummyCombo:
+    def __init__(self, value: str = "") -> None:
+        self.value = value
+
+    def currentText(self) -> str:
         return self.value
 
 
@@ -37,8 +48,8 @@ def test_start_bridge_keeps_running_when_serial_open_fails() -> None:
     app.root.after = Mock()
     app.midi_input = None
     app.serial_link = None
-    app.midi_var = DummyVar("(no MIDI ports)")
-    app.serial_var = DummyVar("(no serial ports)")
+    app.midi_combo = DummyCombo("(no MIDI ports)")
+    app.serial_combo = DummyCombo("(no serial ports)")
     app.log_text = Mock()
 
     def fake_log(message: str) -> None:

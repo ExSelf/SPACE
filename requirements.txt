@@ -1,4 +1,5 @@
 mido
 pyserial
+PySide6
 pyinstaller
 pytest
