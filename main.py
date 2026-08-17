@@ -246,6 +246,7 @@ class BridgeWindow(QtWidgets.QWidget):
 
         self.serial_link = SerialLink(serial_port, config.BAUD_RATE)
         self.serial_link.on_packet = self._on_status_packet
+        self.serial_link.on_receive = self._on_esp_response
         try:
             self.serial_link.open()
             self._log("Serial link ready.")
@@ -282,6 +283,50 @@ class BridgeWindow(QtWidgets.QWidget):
 
     def _on_status_packet(self, packet: Packet) -> None:
         pass
+
+    def _on_esp_response(self, data: bytes) -> None:
+        """Handle responses from the ESP32."""
+        try:
+            # Decode the response
+            response_str = data.decode('utf-8', errors='ignore').strip()
+            
+            # Try to parse as JSON (if ESP32 sends JSON responses)
+            try:
+                import json
+                response = json.loads(response_str)
+                
+                # Process different response types
+                if response.get("type") == "ack":
+                    # Acknowledge command reception
+                    node = response.get("node", "?")
+                    status = response.get("status", "?")
+                    self._schedule_log(f"ESP32 Node {node}: ACK ({status})")
+                
+                elif response.get("type") == "sensor":
+                    # Sensor data from ESP32
+                    node = response.get("node", "?")
+                    voltage = response.get("voltage", "?")
+                    charge = response.get("charge", "?")
+                    self._schedule_log(f"ESP32 Node {node}: Voltage={voltage}V, Charge={charge}%")
+                    
+                    # Update the node registry if available
+                    for node_state in self.node_registry.nodes:
+                        if node_state.number == node:
+                            node_state.voltage = voltage
+                            node_state.charge = charge
+                            self._refresh_node_view()
+                            break
+                
+                else:
+                    # Unknown JSON response type
+                    self._schedule_log(f"ESP32: {response_str}")
+            
+            except json.JSONDecodeError:
+                # Not JSON, just log the raw response
+                self._schedule_log(f"ESP32: {response_str}")
+        
+        except Exception as exc:
+            print(f"Error processing ESP32 response: {exc}")
 
 
 BridgeApp = BridgeWindow
