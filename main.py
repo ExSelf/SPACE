@@ -14,18 +14,17 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from space import config
 from space.midi_input import MidiInput, list_input_ports
 from space.node_registry import NodeRegistry, NodeState
-from space.packet import Packet, StatusPacket, TYPE_COMMAND
+from space.packet import CommandPacket, StatusPacket
 from space.serial_link import SerialLink
 
 
-def midi_to_packet(message: mido.Message, ttl: int = 3) -> Packet | None:
-    """Translate one MIDI message into a command Packet with TTL."""
+def midi_to_packet(message: mido.Message, ttl: int = 3) -> CommandPacket | None:
+    """Translate one MIDI message into a CommandPacket with TTL."""
     if message.type == "note_on":
         node = message.channel + 1
-        return Packet(
-            type=TYPE_COMMAND,
+        return CommandPacket(
+            node_id=node,
             ttl=ttl,
-            node=node,
             command=message.note,
             parameter=message.velocity,
         )
@@ -33,10 +32,9 @@ def midi_to_packet(message: mido.Message, ttl: int = 3) -> Packet | None:
         node = message.channel + 1
         const_cmds = bytearray(12)
         const_cmds[0] = message.value
-        return Packet(
-            type=TYPE_COMMAND,
+        return CommandPacket(
+            node_id=node,
             ttl=ttl,
-            node=node,
             constant_commands=bytes(const_cmds),
         )
     return None
@@ -315,22 +313,22 @@ class BridgeWindow(QtWidgets.QWidget):
     def _on_esp_response(self, data: bytes) -> None:
         """Handle responses from SUN nodes via BEAM."""
         try:
-            # Try to parse as status packet (CSV format)
-            status_packet = StatusPacket.from_wire_payload(data)
+            # Try to parse as binary status packet (250 bytes)
+            status_packet = StatusPacket.from_bytes(data)
             if status_packet is not None:
                 # Update node registry with status
                 updated = self.node_registry.update_node_status(
-                    node_number=status_packet.node,
-                    voltage=status_packet.voltage,
-                    charge=status_packet.charge,
-                    actual_command=status_packet.actual_command,
-                    actual_parameter=status_packet.actual_parameter,
+                    node_number=status_packet.node_id,
+                    voltage=status_packet.voltage_mv / 1000.0,  # Convert mV to V
+                    charge=status_packet.charge_percent,
+                    actual_command=status_packet.command,
+                    actual_parameter=status_packet.parameter,
                 )
                 if updated:
                     self._refresh_node_view()
                     self._schedule_log(
-                        f"Node {status_packet.node}: V={status_packet.voltage:.2f}V, "
-                        f"Charge={status_packet.charge}%, Cmd={status_packet.actual_command}"
+                        f"Node {status_packet.node_id}: V={status_packet.voltage_mv/1000.0:.2f}V, "
+                        f"Charge={status_packet.charge_percent}%, Cmd={status_packet.command}"
                     )
                 return
             
