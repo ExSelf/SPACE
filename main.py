@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -13,16 +14,17 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from space import config
 from space.midi_input import MidiInput, list_input_ports
 from space.node_registry import NodeRegistry, NodeState
-from space.packet import Packet, TYPE_COMMAND
+from space.packet import Packet, StatusPacket, TYPE_COMMAND
 from space.serial_link import SerialLink
 
 
-def midi_to_packet(message: mido.Message) -> Packet | None:
-    """Translate one MIDI message into a command Packet."""
+def midi_to_packet(message: mido.Message, ttl: int = 3) -> Packet | None:
+    """Translate one MIDI message into a command Packet with TTL."""
     if message.type == "note_on":
         node = message.channel + 1
         return Packet(
             type=TYPE_COMMAND,
+            ttl=ttl,
             node=node,
             command=message.note,
             parameter=message.velocity,
@@ -33,6 +35,7 @@ def midi_to_packet(message: mido.Message) -> Packet | None:
         const_cmds[0] = message.value
         return Packet(
             type=TYPE_COMMAND,
+            ttl=ttl,
             node=node,
             constant_commands=bytes(const_cmds),
         )
@@ -90,6 +93,29 @@ class BridgeWindow(QtWidgets.QWidget):
         self.serial_combo.setEditable(False)
         layout.addWidget(self.serial_combo, 1, 1)
 
+        # TTL Slider
+        layout.addWidget(QtWidgets.QLabel("TTL (1-12)"), 2, 0, QtCore.Qt.AlignLeft)
+        ttl_container = QtWidgets.QWidget()
+        ttl_layout = QtWidgets.QHBoxLayout(ttl_container)
+        ttl_layout.setContentsMargins(0, 0, 0, 0)
+        ttl_layout.setSpacing(8)
+        
+        self.ttl_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.ttl_slider.setMinimum(1)
+        self.ttl_slider.setMaximum(12)
+        self.ttl_slider.setValue(3)
+        self.ttl_slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        self.ttl_slider.setTickInterval(1)
+        ttl_layout.addWidget(self.ttl_slider)
+        
+        self.ttl_label = QtWidgets.QLabel("3")
+        self.ttl_label.setMinimumWidth(20)
+        self.ttl_slider.sliderMoved.connect(lambda v: self.ttl_label.setText(str(v)))
+        self.ttl_slider.valueChanged.connect(lambda v: self.ttl_label.setText(str(v)))
+        ttl_layout.addWidget(self.ttl_label)
+        
+        layout.addWidget(ttl_container, 2, 1)
+
         button_row = QtWidgets.QWidget()
         button_layout = QtWidgets.QHBoxLayout(button_row)
         button_layout.setContentsMargins(0, 0, 0, 0)
@@ -100,12 +126,12 @@ class BridgeWindow(QtWidgets.QWidget):
         self.stop_button = QtWidgets.QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_bridge)
         button_layout.addWidget(self.stop_button)
-        layout.addWidget(button_row, 2, 0, 1, 2, QtCore.Qt.AlignLeft)
+        layout.addWidget(button_row, 3, 0, 1, 2, QtCore.Qt.AlignLeft)
 
         self.log_text = QtWidgets.QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setMinimumHeight(140)
-        layout.addWidget(self.log_text, 3, 0, 1, 2)
+        layout.addWidget(self.log_text, 4, 0, 1, 2)
 
         self.node_tree = QtWidgets.QTreeWidget()
         self.node_tree.setColumnCount(9)
@@ -124,7 +150,7 @@ class BridgeWindow(QtWidgets.QWidget):
         self.node_tree.setAlternatingRowColors(True)
         self.node_tree.itemSelectionChanged.connect(self._on_node_selected)
         self.node_tree.header().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
-        layout.addWidget(self.node_tree, 4, 0, 1, 2)
+        layout.addWidget(self.node_tree, 5, 0, 1, 2)
 
         self.channel_panel = QtWidgets.QGroupBox("Node channels")
         channel_layout = QtWidgets.QGridLayout()
@@ -135,11 +161,11 @@ class BridgeWindow(QtWidgets.QWidget):
             self.channel_vars.append(checkbox)
             channel_layout.addWidget(checkbox, index // 8, index % 8)
         self.channel_panel.setLayout(channel_layout)
-        layout.addWidget(self.channel_panel, 5, 0, 1, 2)
+        layout.addWidget(self.channel_panel, 6, 0, 1, 2)
 
-        layout.setRowStretch(3, 1)
-        layout.setRowStretch(4, 2)
-        layout.setRowStretch(5, 1)
+        layout.setRowStretch(4, 1)
+        layout.setRowStretch(5, 2)
+        layout.setRowStretch(6, 1)
         layout.setColumnStretch(1, 1)
 
     def _populate_ports(self) -> None:
@@ -209,7 +235,8 @@ class BridgeWindow(QtWidgets.QWidget):
         self.midi_message_received.emit(message)
 
     def _process_midi(self, message: mido.Message) -> None:
-        packet = midi_to_packet(message)
+        ttl = self.ttl_slider.value()
+        packet = midi_to_packet(message, ttl)
         update = midi_to_registry_update(message)
         if update is not None:
             channel, command, parameter = update
@@ -255,7 +282,8 @@ class BridgeWindow(QtWidgets.QWidget):
             self.serial_link = None
 
         def handle_midi(message: mido.Message) -> None:
-            packet = midi_to_packet(message)
+            ttl = self.ttl_slider.value()
+            packet = midi_to_packet(message, ttl)
             update = midi_to_registry_update(message)
             if update is not None:
                 channel, command, parameter = update
@@ -285,48 +313,60 @@ class BridgeWindow(QtWidgets.QWidget):
         pass
 
     def _on_esp_response(self, data: bytes) -> None:
-        """Handle responses from the ESP32."""
+        """Handle responses from SUN nodes via BEAM."""
         try:
-            # Decode the response
+            # Try to parse as status packet (CSV format)
+            status_packet = StatusPacket.from_wire_payload(data)
+            if status_packet is not None:
+                # Update node registry with status
+                updated = self.node_registry.update_node_status(
+                    node_number=status_packet.node,
+                    voltage=status_packet.voltage,
+                    charge=status_packet.charge,
+                    actual_command=status_packet.actual_command,
+                    actual_parameter=status_packet.actual_parameter,
+                )
+                if updated:
+                    self._refresh_node_view()
+                    self._schedule_log(
+                        f"Node {status_packet.node}: V={status_packet.voltage:.2f}V, "
+                        f"Charge={status_packet.charge}%, Cmd={status_packet.actual_command}"
+                    )
+                return
+            
+            # Try to parse as JSON (for compatibility)
             response_str = data.decode('utf-8', errors='ignore').strip()
             
-            # Try to parse as JSON (if ESP32 sends JSON responses)
             try:
-                import json
                 response = json.loads(response_str)
                 
                 # Process different response types
                 if response.get("type") == "ack":
-                    # Acknowledge command reception
                     node = response.get("node", "?")
                     status = response.get("status", "?")
-                    self._schedule_log(f"ESP32 Node {node}: ACK ({status})")
+                    self._schedule_log(f"Node {node}: ACK ({status})")
                 
-                elif response.get("type") == "sensor":
-                    # Sensor data from ESP32
+                elif response.get("type") == "status":
                     node = response.get("node", "?")
                     voltage = response.get("voltage", "?")
                     charge = response.get("charge", "?")
-                    self._schedule_log(f"ESP32 Node {node}: Voltage={voltage}V, Charge={charge}%")
+                    self._schedule_log(f"Node {node}: Voltage={voltage}V, Charge={charge}%")
                     
-                    # Update the node registry if available
-                    for node_state in self.node_registry.nodes:
-                        if node_state.number == node:
-                            node_state.voltage = voltage
-                            node_state.charge = charge
-                            self._refresh_node_view()
-                            break
+                    # Update the node registry
+                    self.node_registry.update_node_status(node, voltage, charge)
+                    self._refresh_node_view()
                 
                 else:
                     # Unknown JSON response type
-                    self._schedule_log(f"ESP32: {response_str}")
+                    self._schedule_log(f"Response: {response_str}")
             
             except json.JSONDecodeError:
                 # Not JSON, just log the raw response
-                self._schedule_log(f"ESP32: {response_str}")
+                if response_str:
+                    self._schedule_log(f"Response: {response_str}")
         
         except Exception as exc:
-            print(f"Error processing ESP32 response: {exc}")
+            print(f"Error processing response: {exc}")
 
 
 BridgeApp = BridgeWindow

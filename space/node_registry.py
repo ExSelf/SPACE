@@ -190,3 +190,37 @@ class NodeRegistry:
             node.actual_command = command
             node.actual_parameter = parameter
             node.command_timestamp_actual = timestamp
+
+    def update_node_status(self, node_number: int, voltage: float | None = None, 
+                          charge: int | None = None, actual_command: int | None = None,
+                          actual_parameter: int | None = None) -> bool:
+        """
+        Update a node's actual status from a status packet received from the node.
+        Returns True if the node was found and updated, False otherwise.
+        """
+        for node in self.nodes:
+            if node.number == node_number:
+                if voltage is not None:
+                    node.voltage = voltage
+                if charge is not None:
+                    node.charge = charge
+                if actual_command is not None:
+                    node.actual_command = actual_command
+                    node.command_timestamp_actual = time()
+                if actual_parameter is not None:
+                    node.actual_parameter = actual_parameter
+                    node.command_timestamp_actual = time()
+                
+                # Format timestamp as readable string
+                from datetime import datetime
+                node.last_timestamp_received = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                
+                return True
+        return False
+
+    def get_node(self, node_number: int) -> NodeState | None:
+        """Get a node by its number, or None if not found."""
+        for node in self.nodes:
+            if node.number == node_number:
+                return node
+        return None
