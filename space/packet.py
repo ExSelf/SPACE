@@ -221,6 +221,27 @@ class StatusPacket:
             return None
 
 
+def extract_espnow_payload(data: bytes) -> bytes:
+    """Strip the BEAM/ESP-NOW text prefix so the remaining bytes can be parsed as a binary packet."""
+    if data is None:
+        return b""
+
+    frame = bytes(data).rstrip(b"\r\n")
+    if not frame:
+        return frame
+
+    prefix = b"ESP_NOW_FROM"
+    if frame.startswith(prefix):
+        payload = frame[len(prefix):]
+        payload = payload.lstrip(b" \t")
+        if b" " in payload:
+            payload = payload.split(b" ", 1)[1]
+            payload = payload.lstrip(b" \t")
+        return payload.rstrip(b"\r\n")
+
+    return frame
+
+
 # Convenience functions for converting voltage
 def voltage_to_mv(volts: float) -> int:
     """Convert voltage float to millivolts (uint16)."""

@@ -14,30 +14,59 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from space import config
 from space.midi_input import MidiInput, list_input_ports
 from space.node_registry import NodeRegistry, NodeState
-from space.packet import CommandPacket, StatusPacket
+from space.packet import CommandPacket, StatusPacket, extract_espnow_payload
 from space.serial_link import SerialLink
 
 
-def midi_to_packet(message: mido.Message, ttl: int = 3) -> CommandPacket | None:
-    """Translate one MIDI message into a CommandPacket with TTL."""
+def midi_channel_number(channel: int) -> int:
+    """Return the user-facing MIDI channel number (1-16).
+
+    mido stores MIDI channels as 0-15 internally. When we display or log
+    channel numbers to users, we convert back to the standard 1-based MIDI
+    numbering expected by musicians and DAWs.
+    """
+    return channel + 1
+
+
+def midi_to_packet(message: mido.Message, ttl: int = 3, node_id: int | None = None) -> CommandPacket | None:
+    """Translate one MIDI message into a CommandPacket with TTL.
+
+    When a specific target node is provided, that node is used; otherwise the
+    legacy channel-to-node fallback keeps the original behavior for single-node
+    routing scenarios.
+    """
+    target_node = node_id if node_id is not None else message.channel + 1
     if message.type == "note_on":
-        node = message.channel + 1
         return CommandPacket(
-            node_id=node,
+            node_id=target_node,
             ttl=ttl,
             command=message.note,
             parameter=message.velocity,
         )
     if message.type == "control_change":
-        node = message.channel + 1
         const_cmds = bytearray(12)
         const_cmds[0] = message.value
         return CommandPacket(
-            node_id=node,
+            node_id=target_node,
             ttl=ttl,
             constant_commands=bytes(const_cmds),
         )
     return None
+
+
+def midi_to_packets(message: mido.Message, ttl: int = 3, node_registry: NodeRegistry | None = None) -> list[CommandPacket]:
+    """Map a MIDI message to all target nodes that listen to that MIDI channel."""
+    if node_registry is not None:
+        targets = [node.number for node in node_registry.nodes_for_midi_channel(message.channel)]
+        if targets:
+            return [
+                midi_to_packet(message, ttl=ttl, node_id=node_id)
+                for node_id in targets
+                if midi_to_packet(message, ttl=ttl, node_id=node_id) is not None
+            ]
+
+    packet = midi_to_packet(message, ttl=ttl)
+    return [packet] if packet is not None else []
 
 
 def midi_to_registry_update(message: mido.Message) -> tuple[int, int, int] | None:
@@ -54,6 +83,7 @@ class BridgeWindow(QtWidgets.QWidget):
 
     log_message = QtCore.Signal(str)
     midi_message_received = QtCore.Signal(object)
+    serial_message_received = QtCore.Signal(bytes)
 
     def __init__(self) -> None:
         super().__init__()
@@ -71,6 +101,7 @@ class BridgeWindow(QtWidgets.QWidget):
 
         self.log_message.connect(self._log)
         self.midi_message_received.connect(self._process_midi)
+        self.serial_message_received.connect(self._on_esp_response)
 
         self._build_ui()
         self._populate_ports()
@@ -183,7 +214,7 @@ class BridgeWindow(QtWidgets.QWidget):
 
     def _refresh_node_view(self) -> None:
         self.node_tree.clear()
-        for node in self.node_registry.nodes:
+        for node in self.node_registry.recent_nodes(max_age_seconds=60):
             item = QtWidgets.QTreeWidgetItem(
                 [
                     str(node.number),
@@ -232,17 +263,26 @@ class BridgeWindow(QtWidgets.QWidget):
     def _on_midi_message(self, message: mido.Message) -> None:
         self.midi_message_received.emit(message)
 
+    def _queue_serial_response(self, data: bytes) -> None:
+        """Post serial traffic back to the main GUI thread for safe UI updates."""
+        self.serial_message_received.emit(data)
+
     def _process_midi(self, message: mido.Message) -> None:
         ttl = self.ttl_slider.value()
-        packet = midi_to_packet(message, ttl)
         update = midi_to_registry_update(message)
         if update is not None:
             channel, command, parameter = update
             self.node_registry.apply_midi_message(channel=channel, command=command, parameter=parameter)
             self._refresh_node_view()
-            self._schedule_log(f"MIDI {message.type} -> channel {channel} cmd {command} param {parameter}")
-        if packet is not None and self.serial_link is not None:
-            self.serial_link.send(packet)
+            self._schedule_log(
+                f"MIDI {message.type} -> channel {midi_channel_number(channel)} "
+                f"cmd {command} param {parameter}"
+            )
+
+        packets = midi_to_packets(message, ttl, self.node_registry)
+        if self.serial_link is not None:
+            for packet in packets:
+                self.serial_link.send(packet)
 
     def _get_elapsed_ms(self) -> int:
         """Get elapsed time in milliseconds since bridge start."""
@@ -271,7 +311,7 @@ class BridgeWindow(QtWidgets.QWidget):
 
         self.serial_link = SerialLink(serial_port, config.BAUD_RATE)
         self.serial_link.on_packet = self._on_status_packet
-        self.serial_link.on_receive = self._on_esp_response
+        self.serial_link.on_receive = self._queue_serial_response
         try:
             self.serial_link.open()
             self._log("Serial link ready.")
@@ -305,13 +345,14 @@ class BridgeWindow(QtWidgets.QWidget):
     def _on_esp_response(self, data: bytes) -> None:
         """Handle responses from SUN nodes via BEAM."""
         try:
-            # Try to parse as binary status packet (250 bytes)
-            status_packet = StatusPacket.from_bytes(data)
+            payload = extract_espnow_payload(data)
+
+            # Try to parse as a binary status packet first.
+            status_packet = StatusPacket.from_bytes(payload)
             if status_packet is not None:
-                # Update node registry with status
                 updated = self.node_registry.update_node_status(
                     node_number=status_packet.node_id,
-                    voltage=status_packet.voltage_mv / 1000.0,  # Convert mV to V
+                    voltage=status_packet.voltage_mv / 1000.0,
                     charge=status_packet.charge_percent,
                     actual_command=status_packet.command,
                     actual_parameter=status_packet.parameter,
@@ -323,38 +364,40 @@ class BridgeWindow(QtWidgets.QWidget):
                         f"Charge={status_packet.charge_percent}%, Cmd={status_packet.command}"
                     )
                 return
-            
-            # Try to parse as JSON (for compatibility)
-            response_str = data.decode('utf-8', errors='ignore').strip()
-            
+
+            command_packet = CommandPacket.from_bytes(payload)
+            if command_packet is not None:
+                self._schedule_log(
+                    f"Node {command_packet.node_id}: command packet cmd={command_packet.command} "
+                    f"param={command_packet.parameter} ttl={command_packet.ttl}"
+                )
+                return
+
+            response_str = payload.decode('utf-8', errors='ignore').strip()
+
             try:
                 response = json.loads(response_str)
-                
-                # Process different response types
+
                 if response.get("type") == "ack":
                     node = response.get("node", "?")
                     status = response.get("status", "?")
                     self._schedule_log(f"Node {node}: ACK ({status})")
-                
+
                 elif response.get("type") == "status":
                     node = response.get("node", "?")
                     voltage = response.get("voltage", "?")
                     charge = response.get("charge", "?")
                     self._schedule_log(f"Node {node}: Voltage={voltage}V, Charge={charge}%")
-                    
-                    # Update the node registry
                     self.node_registry.update_node_status(node, voltage, charge)
                     self._refresh_node_view()
-                
+
                 else:
-                    # Unknown JSON response type
                     self._schedule_log(f"Response: {response_str}")
-            
+
             except json.JSONDecodeError:
-                # Not JSON, just log the raw response
                 if response_str:
                     self._schedule_log(f"Response: {response_str}")
-        
+
         except Exception as exc:
             print(f"Error processing response: {exc}")
 

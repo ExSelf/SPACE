@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 import pytest
 
@@ -76,3 +77,32 @@ def test_apply_midi_message_updates_all_listening_nodes_and_timestamps() -> None
     assert first.command_timestamp_actual is not None
     assert second.command_timestamp is not None
     assert second.command_timestamp_actual is not None
+
+
+def test_recent_nodes_only_returns_nodes_seen_within_the_window() -> None:
+    registry = NodeRegistry(initialize_default_nodes=False)
+    recent = NodeState(number=1, name="Recent", address="0x01", command_timestamp_actual=time.time() - 30)
+    stale = NodeState(number=2, name="Stale", address="0x02", command_timestamp_actual=time.time() - 120)
+    registry.add_node(recent)
+    registry.add_node(stale)
+
+    visible = registry.recent_nodes(max_age_seconds=60)
+
+    assert visible == [recent]
+
+
+def test_nodes_for_midi_channel_uses_configured_listen_channels() -> None:
+    registry = NodeRegistry(initialize_default_nodes=False)
+    node_1 = NodeState(number=1, name="Node 1", address="0x01", listen_channels=[False] * 16)
+    node_14 = NodeState(number=14, name="Node 14", address="0x14", listen_channels=[False] * 16)
+    node_255 = NodeState(number=255, name="Node 255", address="0xff", listen_channels=[False] * 16)
+    node_1.listen_channels[13] = True
+    node_14.listen_channels[13] = True
+    node_255.listen_channels[13] = True
+    registry.add_node(node_1)
+    registry.add_node(node_14)
+    registry.add_node(node_255)
+
+    targets = registry.nodes_for_midi_channel(13)
+
+    assert [node.number for node in targets] == [1, 14, 255]

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
+import mido
+
 import main
 import space.midi_input as midi_input
+from space import packet as packet_module
 
 
 class DummyButton:
@@ -68,3 +71,72 @@ def test_start_bridge_keeps_running_when_serial_open_fails() -> None:
     assert app.running is True
     assert app.midi_input is midi_instance
     assert app.serial_link is None
+
+
+def test_midi_channel_numbering_uses_human_facing_channel_labels() -> None:
+    message = mido.Message("note_on", channel=5, note=60, velocity=64)
+
+    assert main.midi_channel_number(message.channel) == 6
+    assert main.midi_to_registry_update(message) == (5, 60, 64)
+
+
+def test_start_bridge_routes_serial_responses_to_gui_thread() -> None:
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app.running = False
+    app.start_button = DummyButton()
+    app.midi_input = None
+    app.serial_link = None
+    app.midi_combo = DummyCombo("(no MIDI ports)")
+    app.serial_combo = DummyCombo("(no serial ports)")
+    app.log_text = Mock()
+    app._log = Mock()
+    app._schedule_log = Mock()
+    app._refresh_node_view = Mock()
+    app.serial_message_received = Mock()
+
+    with patch("main.SerialLink") as serial_cls, patch("main.MidiInput") as midi_cls:
+        serial_instance = serial_cls.return_value
+        serial_instance.on_receive = None
+        midi_instance = midi_cls.return_value
+
+        app.start_bridge()
+
+    assert callable(app.serial_link.on_receive)
+    assert app.serial_link.on_receive.__name__ == "_queue_serial_response"
+    assert app.serial_link.on_receive.__self__ is app
+    assert app.serial_link is not None
+    assert app.midi_input is midi_instance
+
+
+def test_espnow_messages_strip_the_text_prefix_before_parsing() -> None:
+    packet = bytearray(250)
+    packet[0] = 0x02
+    packet[1] = 0x03
+    packet[2] = 0x03
+    packet[25:27] = (3300).to_bytes(2, byteorder="little")
+    packet[27] = 0x50
+
+    raw = b"ESP_NOW_FROM 48:F6:EE:70:43:50 " + bytes(packet) + b"\n"
+
+    extracted = packet_module.extract_espnow_payload(raw)
+
+    assert extracted == bytes(packet)
+    parsed = packet_module.StatusPacket.from_bytes(extracted)
+    assert parsed is not None
+    assert parsed.node_id == 3
+    assert parsed.voltage_mv == 3300
+    assert parsed.charge_percent == 80
+
+    command_packet = bytearray(250)
+    command_packet[0] = 0x01
+    command_packet[1] = 0x03
+    command_packet[2] = 0x03
+    command_packet[11] = 0x0A
+    command_packet[12] = 0x20
+
+    command_raw = b"ESP_NOW_FROM 48:F6:EE:70:43:50 " + bytes(command_packet) + b"\n"
+    command_parsed = packet_module.CommandPacket.from_bytes(packet_module.extract_espnow_payload(command_raw))
+    assert command_parsed is not None
+    assert command_parsed.node_id == 3
+    assert command_parsed.command == 0x0A
+    assert command_parsed.parameter == 0x20

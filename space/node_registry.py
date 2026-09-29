@@ -25,6 +25,7 @@ class NodeState:
     voltage: float | None = None
     charge: int | None = None
     last_timestamp_received: str | None = None
+    last_seen_at: float | None = None
     listen_channels: List[bool] = field(default_factory=lambda: [False] * 16)
 
 
@@ -53,6 +54,7 @@ class NodeRegistry:
                 voltage=None,
                 charge=None,
                 last_timestamp_received=None,
+                last_seen_at=None,
                 listen_channels=[False] * 16,
             )
             for index in range(1, 256)
@@ -83,6 +85,7 @@ class NodeRegistry:
                 voltage=3.3,
                 charge=100,
                 last_timestamp_received="--",
+                last_seen_at=time(),
                 listen_channels=[True] * 16,
             )
             self.add_node(node)
@@ -102,6 +105,7 @@ class NodeRegistry:
         node.voltage = 3.3
         node.charge = 100
         node.last_timestamp_received = "--"
+        node.last_seen_at = time()
         node.listen_channels = [True] * 16
         return node
 
@@ -148,6 +152,7 @@ class NodeRegistry:
                     voltage=None,
                     charge=None,
                     last_timestamp_received=None,
+                    last_seen_at=None,
                     listen_channels=list(entry.get("listen_channels", [False] * 16)),
                 )
             )
@@ -170,11 +175,34 @@ class NodeRegistry:
                         voltage=None,
                         charge=None,
                         last_timestamp_received=None,
+                        last_seen_at=None,
                         listen_channels=[False] * 16,
                     )
                 )
 
         self.nodes = loaded_nodes[:255]
+
+    def recent_nodes(self, max_age_seconds: float = 60.0) -> List[NodeState]:
+        """Return nodes seen within the recent activity window."""
+        cutoff = time() - max_age_seconds
+        recent: List[NodeState] = []
+        for node in self.nodes:
+            candidate_times = [
+                node.last_seen_at,
+                node.command_timestamp_actual,
+                node.command_timestamp,
+            ]
+            latest_seen = max((candidate for candidate in candidate_times if candidate is not None), default=None)
+            if latest_seen is not None and latest_seen >= cutoff:
+                recent.append(node)
+        return recent
+
+    def nodes_for_midi_channel(self, channel: int) -> List[NodeState]:
+        """Return all configured nodes that listen to a given MIDI channel."""
+        if not 0 <= channel < 16:
+            return []
+
+        return [node for node in self.nodes if node.listen_channels[channel]]
 
     def apply_midi_message(self, channel: int, command: int, parameter: int) -> None:
         """Update every node that listens to the provided MIDI channel."""
@@ -190,6 +218,7 @@ class NodeRegistry:
             node.actual_command = command
             node.actual_parameter = parameter
             node.command_timestamp_actual = timestamp
+            node.last_seen_at = timestamp
 
     def update_node_status(self, node_number: int, voltage: float | None = None, 
                           charge: int | None = None, actual_command: int | None = None,
@@ -204,13 +233,15 @@ class NodeRegistry:
                     node.voltage = voltage
                 if charge is not None:
                     node.charge = charge
+                now = time()
                 if actual_command is not None:
                     node.actual_command = actual_command
-                    node.command_timestamp_actual = time()
+                    node.command_timestamp_actual = now
                 if actual_parameter is not None:
                     node.actual_parameter = actual_parameter
-                    node.command_timestamp_actual = time()
-                
+                    node.command_timestamp_actual = now
+                node.last_seen_at = now
+
                 # Format timestamp as readable string
                 from datetime import datetime
                 node.last_timestamp_received = datetime.now().strftime("%H:%M:%S.%f")[:-3]
