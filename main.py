@@ -279,20 +279,12 @@ class BridgeWindow(QtWidgets.QWidget):
             self._log(f"Serial link unavailable: {exc}")
             self.serial_link = None
 
-        def handle_midi(message: mido.Message) -> None:
-            ttl = self.ttl_slider.value()
-            packet = midi_to_packet(message, ttl)
-            update = midi_to_registry_update(message)
-            if update is not None:
-                channel, command, parameter = update
-                self.node_registry.apply_midi_message(channel=channel, command=command, parameter=parameter)
-                self._refresh_node_view()
-                self._schedule_log(f"MIDI {message.type} -> channel {channel} cmd {command} param {parameter}")
-            if packet is not None:
-                if self.serial_link is not None:
-                    self.serial_link.send(packet)
-
-        self.midi_input = MidiInput(midi_port, handle_midi)
+        # Route MIDI callbacks through the Qt signal to ensure thread-safety.
+        # The MIDI callback may run on a background thread; emitting the
+        # `midi_message_received` signal ensures `_process_midi` runs on the
+        # Qt main thread and avoids interacting with UI objects from another
+        # thread (which can cause crashes).
+        self.midi_input = MidiInput(midi_port, self._on_midi_message)
         self.midi_input.open()
         self._log("Bridge running. Waiting for MIDI input...")
 
