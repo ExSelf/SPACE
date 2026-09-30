@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import sys
 import time
 import tkinter as tk
@@ -16,6 +17,56 @@ from space.midi_input import MidiInput, list_input_ports
 from space.node_registry import NodeRegistry, NodeState
 from space.packet import CommandPacket, StatusPacket, extract_espnow_payload
 from space.serial_link import SerialLink
+
+
+def format_global_time(global_time_ms: int) -> str:
+    """Format a millisecond global-time counter as HH:mm:ss."""
+    seconds = (int(global_time_ms) // 1000) % (24 * 60 * 60)
+    hours, seconds = divmod(seconds, 60 * 60)
+    minutes, seconds = divmod(seconds, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def parse_global_time(response: object) -> int | None:
+    """Extract a millisecond global-time value from BEAM text or JSON."""
+    if isinstance(response, dict):
+        for key in ("globalTime", "global_time", "global_timestamp_ms"):
+            value = response.get(key)
+            if value is not None:
+                try:
+                    parsed = int(value)
+                except (TypeError, ValueError):
+                    return None
+                return parsed if parsed >= 0 else None
+        return None
+
+    if isinstance(response, bool):
+        return None
+    if isinstance(response, int):
+        return response if response >= 0 else None
+    if not isinstance(response, str):
+        return None
+
+    text = response.strip()
+    if text.isdecimal():
+        return int(text)
+    if text.startswith("{"):
+        try:
+            return parse_global_time(json.loads(text))
+        except json.JSONDecodeError:
+            return None
+    match = re.fullmatch(r"(?:globalTime|global_time|global_timestamp_ms)\s*[:=,]\s*(\d+)", text, re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+def beam_indicator_state(running: bool, started_at: float | None, received_at: float | None, now: float) -> str:
+    """Return the connection state based on the latest BEAM time update."""
+    if not running:
+        return "stopped"
+    reference_time = received_at if received_at is not None else started_at
+    if reference_time is not None and now - reference_time >= 1.0:
+        return "lost"
+    return "connected" if received_at is not None else "waiting"
 
 
 def midi_channel_number(channel: int) -> int:
@@ -95,6 +146,8 @@ class BridgeWindow(QtWidgets.QWidget):
         self.serial_link: Optional[SerialLink] = None
         self.running = False
         self.start_time: Optional[float] = None
+        self._beam_monitor_started_at: float | None = None
+        self._beam_global_time_received_at: float | None = None
         self.settings_path = Path(__file__).with_name("node_settings.json")
         self.node_registry = NodeRegistry(initialize_default_nodes=False)
         self.node_registry.load_from_file(self.settings_path)
@@ -104,6 +157,10 @@ class BridgeWindow(QtWidgets.QWidget):
         self.serial_message_received.connect(self._on_esp_response)
 
         self._build_ui()
+        self._beam_status_timer = QtCore.QTimer(self)
+        self._beam_status_timer.setInterval(100)
+        self._beam_status_timer.timeout.connect(self._refresh_beam_indicator)
+        self._set_beam_indicator("stopped")
         self._populate_ports()
         self._refresh_node_view()
 
@@ -155,6 +212,15 @@ class BridgeWindow(QtWidgets.QWidget):
         self.stop_button = QtWidgets.QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_bridge)
         button_layout.addWidget(self.stop_button)
+        self.beam_indicator = QtWidgets.QLabel()
+        self.beam_indicator.setFixedSize(12, 12)
+        self.beam_indicator.setAccessibleName("BEAM communication status")
+        self.beam_time_label = QtWidgets.QLabel("--:--:--")
+        self.beam_time_label.setMinimumWidth(68)
+        self.beam_time_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.beam_time_label.setToolTip("Latest global time received from BEAM")
+        button_layout.addWidget(self.beam_indicator)
+        button_layout.addWidget(self.beam_time_label)
         layout.addWidget(button_row, 3, 0, 1, 2, QtCore.Qt.AlignLeft)
 
         self.log_text = QtWidgets.QTextEdit()
@@ -267,6 +333,36 @@ class BridgeWindow(QtWidgets.QWidget):
         """Post serial traffic back to the main GUI thread for safe UI updates."""
         self.serial_message_received.emit(data)
 
+    def _set_beam_indicator(self, state: str) -> None:
+        colors = {
+            "stopped": ("#858585", "Bridge stopped"),
+            "waiting": ("#858585", "Waiting for BEAM global time"),
+            "connected": ("#2e9b50", "BEAM global time received recently"),
+            "lost": ("#d64545", "No BEAM global-time update for at least one second"),
+        }
+        color, description = colors[state]
+        self.beam_indicator.setStyleSheet(
+            f"QLabel {{ background-color: {color}; border: 1px solid {color}; border-radius: 6px; }}"
+        )
+        self.beam_indicator.setToolTip(description)
+
+    def _refresh_beam_indicator(self) -> None:
+        self._set_beam_indicator(
+            beam_indicator_state(
+                running=self.running,
+                started_at=self._beam_monitor_started_at,
+                received_at=self._beam_global_time_received_at,
+                now=time.monotonic(),
+            )
+        )
+
+    def _update_beam_global_time(self, global_time_ms: int) -> None:
+        if global_time_ms < 0:
+            return
+        self.beam_time_label.setText(format_global_time(global_time_ms))
+        self._beam_global_time_received_at = time.monotonic()
+        self._refresh_beam_indicator()
+
     def _process_midi(self, message: mido.Message) -> None:
         ttl = self.ttl_slider.value()
         update = midi_to_registry_update(message)
@@ -295,6 +391,10 @@ class BridgeWindow(QtWidgets.QWidget):
             return
 
         self.start_time = time.time()
+        self._beam_monitor_started_at = time.monotonic()
+        self._beam_global_time_received_at = None
+        self._beam_status_timer.start()
+        self._refresh_beam_indicator()
         self._log("Starting bridge...")
         self.running = True
         self.start_button.setEnabled(False)
@@ -332,6 +432,8 @@ class BridgeWindow(QtWidgets.QWidget):
         if not self.running:
             return
         self.running = False
+        self._beam_status_timer.stop()
+        self._refresh_beam_indicator()
         self.start_button.setEnabled(True)
         if self.midi_input is not None:
             self.midi_input.close()
@@ -350,6 +452,7 @@ class BridgeWindow(QtWidgets.QWidget):
             # Try to parse as a binary status packet first.
             status_packet = StatusPacket.from_bytes(payload)
             if status_packet is not None:
+                self._update_beam_global_time(status_packet.global_timestamp_ms or 0)
                 updated = self.node_registry.update_node_status(
                     node_number=status_packet.node_id,
                     voltage=status_packet.voltage_mv / 1000.0,
@@ -367,6 +470,7 @@ class BridgeWindow(QtWidgets.QWidget):
 
             command_packet = CommandPacket.from_bytes(payload)
             if command_packet is not None:
+                self._update_beam_global_time(command_packet.global_timestamp_ms or 0)
                 self._schedule_log(
                     f"Node {command_packet.node_id}: command packet cmd={command_packet.command} "
                     f"param={command_packet.parameter} ttl={command_packet.ttl}"
@@ -374,16 +478,25 @@ class BridgeWindow(QtWidgets.QWidget):
                 return
 
             response_str = payload.decode('utf-8', errors='ignore').strip()
+            if not response_str.startswith("{"):
+                text_global_time = parse_global_time(response_str)
+                if text_global_time is not None:
+                    self._update_beam_global_time(text_global_time)
+                    return
 
             try:
                 response = json.loads(response_str)
 
-                if response.get("type") == "ack":
+                json_global_time = parse_global_time(response)
+                if json_global_time is not None:
+                    self._update_beam_global_time(json_global_time)
+
+                if isinstance(response, dict) and response.get("type") == "ack":
                     node = response.get("node", "?")
                     status = response.get("status", "?")
                     self._schedule_log(f"Node {node}: ACK ({status})")
 
-                elif response.get("type") == "status":
+                elif isinstance(response, dict) and response.get("type") == "status":
                     node = response.get("node", "?")
                     voltage = response.get("voltage", "?")
                     charge = response.get("charge", "?")
@@ -392,7 +505,8 @@ class BridgeWindow(QtWidgets.QWidget):
                     self._refresh_node_view()
 
                 else:
-                    self._schedule_log(f"Response: {response_str}")
+                    if json_global_time is None:
+                        self._schedule_log(f"Response: {response_str}")
 
             except json.JSONDecodeError:
                 if response_str:

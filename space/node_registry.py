@@ -85,7 +85,6 @@ class NodeRegistry:
                 voltage=3.3,
                 charge=100,
                 last_timestamp_received="--",
-                last_seen_at=time(),
                 listen_channels=[True] * 16,
             )
             self.add_node(node)
@@ -105,7 +104,6 @@ class NodeRegistry:
         node.voltage = 3.3
         node.charge = 100
         node.last_timestamp_received = "--"
-        node.last_seen_at = time()
         node.listen_channels = [True] * 16
         return node
 
@@ -185,17 +183,11 @@ class NodeRegistry:
     def recent_nodes(self, max_age_seconds: float = 60.0) -> List[NodeState]:
         """Return nodes seen within the recent activity window."""
         cutoff = time() - max_age_seconds
-        recent: List[NodeState] = []
-        for node in self.nodes:
-            candidate_times = [
-                node.last_seen_at,
-                node.command_timestamp_actual,
-                node.command_timestamp,
-            ]
-            latest_seen = max((candidate for candidate in candidate_times if candidate is not None), default=None)
-            if latest_seen is not None and latest_seen >= cutoff:
-                recent.append(node)
-        return recent
+        return [
+            node
+            for node in self.nodes
+            if node.last_seen_at is not None and node.last_seen_at >= cutoff
+        ]
 
     def nodes_for_midi_channel(self, channel: int) -> List[NodeState]:
         """Return all configured nodes that listen to a given MIDI channel."""
@@ -215,10 +207,6 @@ class NodeRegistry:
             node.command = command
             node.parameter = parameter
             node.command_timestamp = timestamp
-            node.actual_command = command
-            node.actual_parameter = parameter
-            node.command_timestamp_actual = timestamp
-            node.last_seen_at = timestamp
 
     def update_node_status(self, node_number: int, voltage: float | None = None, 
                           charge: int | None = None, actual_command: int | None = None,

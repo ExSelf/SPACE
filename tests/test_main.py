@@ -46,6 +46,8 @@ def test_list_input_ports_uses_windows_fallback_when_mido_is_unavailable() -> No
 def test_start_bridge_keeps_running_when_serial_open_fails() -> None:
     app = main.BridgeApp.__new__(main.BridgeApp)
     app.running = False
+    app._beam_status_timer = Mock()
+    app._refresh_beam_indicator = Mock()
     app.start_button = DummyButton()
     app.root = Mock()
     app.root.after = Mock()
@@ -80,9 +82,32 @@ def test_midi_channel_numbering_uses_human_facing_channel_labels() -> None:
     assert main.midi_to_registry_update(message) == (5, 60, 64)
 
 
+def test_global_time_formats_milliseconds_as_hours_minutes_seconds() -> None:
+    assert main.format_global_time(3_723_000) == "01:02:03"
+    assert main.format_global_time(86_401_000) == "00:00:01"
+
+
+def test_global_time_parser_accepts_integer_json_and_firmware_text() -> None:
+    assert main.parse_global_time(1234) == 1234
+    assert main.parse_global_time('{"globalTime": 1234}') == 1234
+    assert main.parse_global_time({"globalTime": 1234}) == 1234
+    assert main.parse_global_time("globalTime:1234") == 1234
+    assert main.parse_global_time("1234") == 1234
+
+
+def test_beam_indicator_tracks_recent_updates_and_stops_grey() -> None:
+    assert main.beam_indicator_state(False, None, None, 10.0) == "stopped"
+    assert main.beam_indicator_state(True, 10.0, None, 10.9) == "waiting"
+    assert main.beam_indicator_state(True, 10.0, None, 11.0) == "lost"
+    assert main.beam_indicator_state(True, 0.0, 10.0, 10.9) == "connected"
+    assert main.beam_indicator_state(True, 0.0, 10.0, 11.0) == "lost"
+
+
 def test_start_bridge_routes_serial_responses_to_gui_thread() -> None:
     app = main.BridgeApp.__new__(main.BridgeApp)
     app.running = False
+    app._beam_status_timer = Mock()
+    app._refresh_beam_indicator = Mock()
     app.start_button = DummyButton()
     app.midi_input = None
     app.serial_link = None

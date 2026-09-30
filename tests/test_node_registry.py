@@ -74,21 +74,36 @@ def test_apply_midi_message_updates_all_listening_nodes_and_timestamps() -> None
     assert second.command == 60
     assert second.parameter == 120
     assert first.command_timestamp is not None
-    assert first.command_timestamp_actual is not None
     assert second.command_timestamp is not None
-    assert second.command_timestamp_actual is not None
+    assert first.actual_command is None
+    assert second.actual_command is None
+    assert registry.recent_nodes() == []
 
 
 def test_recent_nodes_only_returns_nodes_seen_within_the_window() -> None:
     registry = NodeRegistry(initialize_default_nodes=False)
-    recent = NodeState(number=1, name="Recent", address="0x01", command_timestamp_actual=time.time() - 30)
-    stale = NodeState(number=2, name="Stale", address="0x02", command_timestamp_actual=time.time() - 120)
+    recent = NodeState(number=1, name="Recent", address="0x01", last_seen_at=time.time() - 30)
+    stale = NodeState(number=2, name="Stale", address="0x02", last_seen_at=time.time() - 120)
     registry.add_node(recent)
     registry.add_node(stale)
 
     visible = registry.recent_nodes(max_age_seconds=60)
 
     assert visible == [recent]
+
+
+def test_received_node_status_marks_only_that_node_as_recent() -> None:
+    registry = NodeRegistry(initialize_default_nodes=False)
+    node_3 = NodeState(number=3, name="Node 3", address="0x03")
+    node_5 = NodeState(number=5, name="Node 5", address="0x05")
+    node_255 = NodeState(number=255, name="Node 255", address="0xff")
+    registry.add_node(node_3)
+    registry.add_node(node_5)
+    registry.add_node(node_255)
+
+    assert registry.update_node_status(node_number=255, voltage=3.3, charge=90)
+
+    assert registry.recent_nodes() == [node_255]
 
 
 def test_nodes_for_midi_channel_uses_configured_listen_channels() -> None:
