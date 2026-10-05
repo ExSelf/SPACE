@@ -59,14 +59,22 @@ def parse_global_time(response: object) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def beam_indicator_state(running: bool, started_at: float | None, received_at: float | None, now: float) -> str:
-    """Return the connection state based on the latest BEAM time update."""
-    if not running:
+def beam_indicator_state(
+    running: bool,
+    serial_open: bool,
+    opened_at: float | None,
+    received_at: float | None,
+    now: float,
+) -> str:
+    """Show whether BEAM packets have reached SPACE within the last second."""
+    if not running or not serial_open:
         return "stopped"
-    reference_time = received_at if received_at is not None else started_at
-    if reference_time is not None and now - reference_time >= 1.0:
+    reference_time = received_at if received_at is not None else opened_at
+    if reference_time is None:
+        return "stopped"
+    if now - reference_time >= 1.0:
         return "lost"
-    return "connected" if received_at is not None else "waiting"
+    return "connected" if received_at is not None else "starting"
 
 
 def midi_channel_number(channel: int) -> int:
@@ -77,6 +85,24 @@ def midi_channel_number(channel: int) -> int:
     numbering expected by musicians and DAWs.
     """
     return channel + 1
+
+
+def usable_serial_ports(ports: list[str]) -> list[str]:
+    """Remove macOS pseudo-ports that cannot connect to the BEAM board."""
+    unused_names = ("/cu.debug-console", "/cu.wlan-debug", "/cu.bluetooth-incoming-port")
+    return [port for port in ports if not port.lower().endswith(unused_names)]
+
+
+def preferred_serial_port_index(ports: list[str]) -> int:
+    """Prefer the known BEAM USB modem, then another USB serial device."""
+    for index, port in enumerate(ports):
+        if port.lower().endswith("/cu.usbmodem01"):
+            return index
+    for index, port in enumerate(ports):
+        lowered = port.lower()
+        if "usbmodem" in lowered or "usbserial" in lowered:
+            return index
+    return 0
 
 
 def midi_to_packet(message: mido.Message, ttl: int = 3, node_id: int | None = None) -> CommandPacket | None:
@@ -265,7 +291,7 @@ class BridgeWindow(QtWidgets.QWidget):
 
     def _populate_ports(self) -> None:
         midi_ports = list_input_ports()
-        serial_ports = SerialLink.list_ports()
+        serial_ports = usable_serial_ports(SerialLink.list_ports())
 
         self.midi_combo.clear()
         self.serial_combo.clear()
@@ -276,7 +302,7 @@ class BridgeWindow(QtWidgets.QWidget):
         if midi_ports:
             self.midi_combo.setCurrentIndex(0)
         if serial_ports:
-            self.serial_combo.setCurrentIndex(0)
+            self.serial_combo.setCurrentIndex(preferred_serial_port_index(serial_ports))
 
     def _refresh_node_view(self) -> None:
         self.node_tree.clear()
@@ -336,9 +362,9 @@ class BridgeWindow(QtWidgets.QWidget):
     def _set_beam_indicator(self, state: str) -> None:
         colors = {
             "stopped": ("#858585", "Bridge stopped"),
-            "waiting": ("#858585", "Waiting for BEAM global time"),
-            "connected": ("#2e9b50", "BEAM global time received recently"),
-            "lost": ("#d64545", "No BEAM global-time update for at least one second"),
+            "starting": ("#858585", "USB port open; waiting for the first BEAM packet"),
+            "connected": ("#2e9b50", "BEAM packet received by SPACE within the last second"),
+            "lost": ("#d64545", "No BEAM packet received by SPACE for at least one second"),
         }
         color, description = colors[state]
         self.beam_indicator.setStyleSheet(
@@ -347,10 +373,12 @@ class BridgeWindow(QtWidgets.QWidget):
         self.beam_indicator.setToolTip(description)
 
     def _refresh_beam_indicator(self) -> None:
+        serial_open = self.serial_link is not None and self.serial_link.is_open()
         self._set_beam_indicator(
             beam_indicator_state(
                 running=self.running,
-                started_at=self._beam_monitor_started_at,
+                serial_open=serial_open,
+                opened_at=self._beam_monitor_started_at,
                 received_at=self._beam_global_time_received_at,
                 now=time.monotonic(),
             )
@@ -391,7 +419,7 @@ class BridgeWindow(QtWidgets.QWidget):
             return
 
         self.start_time = time.time()
-        self._beam_monitor_started_at = time.monotonic()
+        self._beam_monitor_started_at = None
         self._beam_global_time_received_at = None
         self._beam_status_timer.start()
         self._refresh_beam_indicator()
@@ -414,10 +442,13 @@ class BridgeWindow(QtWidgets.QWidget):
         self.serial_link.on_receive = self._queue_serial_response
         try:
             self.serial_link.open()
+            self._beam_monitor_started_at = time.monotonic()
             self._log("Serial link ready.")
+            self._refresh_beam_indicator()
         except Exception as exc:
             self._log(f"Serial link unavailable: {exc}")
             self.serial_link = None
+            self._beam_monitor_started_at = None
 
         # Route MIDI callbacks through the Qt signal to ensure thread-safety.
         # The MIDI callback may run on a background thread; emitting the
@@ -432,6 +463,7 @@ class BridgeWindow(QtWidgets.QWidget):
         if not self.running:
             return
         self.running = False
+        self._beam_monitor_started_at = None
         self._beam_status_timer.stop()
         self._refresh_beam_indicator()
         self.start_button.setEnabled(True)

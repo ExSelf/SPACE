@@ -7,6 +7,7 @@ import mido
 import main
 import space.midi_input as midi_input
 from space import packet as packet_module
+from space.serial_link import extract_status_frames
 
 
 class DummyButton:
@@ -82,6 +83,21 @@ def test_midi_channel_numbering_uses_human_facing_channel_labels() -> None:
     assert main.midi_to_registry_update(message) == (5, 60, 64)
 
 
+def test_serial_port_selection_prefers_usb_device_over_macos_pseudo_ports() -> None:
+    ports = [
+        "/dev/cu.debug-console",
+        "/dev/cu.wlan-debug",
+        "/dev/cu.Bluetooth-Incoming-Port",
+        "/dev/cu.usbmodem01",
+    ]
+
+    usable_ports = main.usable_serial_ports(ports)
+    assert usable_ports == ["/dev/cu.usbmodem01"]
+    assert main.preferred_serial_port_index(usable_ports) == 0
+    assert main.preferred_serial_port_index(["/dev/cu.usbmodem02", "/dev/cu.usbmodem01"]) == 1
+    assert main.preferred_serial_port_index(["COM3", "COM4"]) == 0
+
+
 def test_global_time_formats_milliseconds_as_hours_minutes_seconds() -> None:
     assert main.format_global_time(3_723_000) == "01:02:03"
     assert main.format_global_time(86_401_000) == "00:00:01"
@@ -96,11 +112,12 @@ def test_global_time_parser_accepts_integer_json_and_firmware_text() -> None:
 
 
 def test_beam_indicator_tracks_recent_updates_and_stops_grey() -> None:
-    assert main.beam_indicator_state(False, None, None, 10.0) == "stopped"
-    assert main.beam_indicator_state(True, 10.0, None, 10.9) == "waiting"
-    assert main.beam_indicator_state(True, 10.0, None, 11.0) == "lost"
-    assert main.beam_indicator_state(True, 0.0, 10.0, 10.9) == "connected"
-    assert main.beam_indicator_state(True, 0.0, 10.0, 11.0) == "lost"
+    assert main.beam_indicator_state(False, False, None, None, 10.0) == "stopped"
+    assert main.beam_indicator_state(True, False, 10.0, None, 10.5) == "stopped"
+    assert main.beam_indicator_state(True, True, 10.0, None, 10.9) == "starting"
+    assert main.beam_indicator_state(True, True, 10.0, None, 11.0) == "lost"
+    assert main.beam_indicator_state(True, True, 10.0, 10.0, 10.9) == "connected"
+    assert main.beam_indicator_state(True, True, 10.0, 10.0, 11.0) == "lost"
 
 
 def test_start_bridge_routes_serial_responses_to_gui_thread() -> None:
@@ -165,3 +182,23 @@ def test_espnow_messages_strip_the_text_prefix_before_parsing() -> None:
     assert command_parsed.node_id == 3
     assert command_parsed.command == 0x0A
     assert command_parsed.parameter == 0x20
+
+
+def test_beam_binary_serial_stream_frames_partial_packets_without_newline_splitting() -> None:
+    first = bytearray(250)
+    first[0] = packet_module.TYPE_STATUS
+    first[1] = 3
+    first[2] = 3
+    first[11] = 10
+    first[12] = 0x0A
+
+    second = bytearray(first)
+    second[1] = 4
+    buffer = bytearray()
+
+    buffer.extend(first[:37])
+    assert extract_status_frames(buffer) == []
+
+    buffer.extend(first[37:] + second)
+    assert extract_status_frames(buffer) == [bytes(first), bytes(second)]
+    assert buffer == b""

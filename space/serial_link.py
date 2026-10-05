@@ -9,6 +9,31 @@ from typing import Callable
 import serial
 from serial.tools import list_ports
 
+from space.packet import PACKET_SIZE, TYPE_STATUS, StatusPacket
+
+
+def extract_status_frames(buffer: bytearray) -> list[bytes]:
+    """Extract complete SUN status packets from BEAM's binary USB stream."""
+    packets = []
+    while True:
+        start = buffer.find(bytes((TYPE_STATUS,)))
+        if start < 0:
+            buffer.clear()
+            break
+        if start:
+            del buffer[:start]
+        if len(buffer) < PACKET_SIZE:
+            break
+
+        frame = bytes(buffer[:PACKET_SIZE])
+        if frame[1] == 0 or frame[2] > 12 or StatusPacket.from_bytes(frame) is None:
+            del buffer[0]
+            continue
+
+        del buffer[:PACKET_SIZE]
+        packets.append(frame)
+    return packets
+
 
 class SerialLink:
     """A lightweight wrapper around pyserial for packet transport with bi-directional support."""
@@ -53,17 +78,19 @@ class SerialLink:
         return self._serial is not None and self._serial.is_open
 
     def _receive_loop(self) -> None:
-        """Background thread: continuously read from serial port and queue received data."""
+        """Read BEAM's fixed-size binary SUN records from the serial byte stream."""
+        receive_buffer = bytearray()
         while not self._stop_receive and self.is_open():
             try:
-                if self._serial.in_waiting > 0:
-                    data = self._serial.readline()
+                waiting = self._serial.in_waiting
+                if waiting > 0:
+                    data = self._serial.read(waiting)
                     if data:
-                        self._rx_queue.put(data)
-                        print(f"Received: {data.decode('utf-8', errors='ignore')}")
-                        # Trigger callback if set
-                        if self.on_receive is not None:
-                            self.on_receive(data)
+                        receive_buffer.extend(data)
+                        for packet in extract_status_frames(receive_buffer):
+                            self._rx_queue.put(packet)
+                            if self.on_receive is not None:
+                                self.on_receive(packet)
             except Exception as exc:
                 if not self._stop_receive:
                     print(f"Error reading from serial: {exc}")
