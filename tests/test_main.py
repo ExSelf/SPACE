@@ -84,6 +84,17 @@ def test_midi_channel_numbering_uses_human_facing_channel_labels() -> None:
     assert main.midi_to_registry_update(message) == (5, 60, 64)
 
 
+def test_control_change_shows_its_value_as_the_command() -> None:
+    message = mido.Message("control_change", channel=5, control=64, value=127)
+
+    assert main.midi_to_registry_update(message) == (5, 127, None)
+    packet = main.midi_to_packet(message, node_id=6)
+    assert packet is not None
+    assert packet.command == 0
+    assert packet.parameter == 0
+    assert packet.constant_commands[0] == 127
+
+
 def test_process_midi_logs_serial_send_failure() -> None:
     app = main.BridgeApp.__new__(main.BridgeApp)
     app.ttl_slider = Mock()
@@ -236,6 +247,34 @@ def test_espnow_messages_strip_the_text_prefix_before_parsing() -> None:
     assert command_parsed.node_id == 3
     assert command_parsed.command == 0x0A
     assert command_parsed.parameter == 0x20
+
+
+@pytest.mark.parametrize("show_status_messages", [False, True])
+def test_status_packet_log_is_controlled_by_checkbox(show_status_messages: bool) -> None:
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app.show_status_messages_checkbox = Mock()
+    app.show_status_messages_checkbox.isChecked.return_value = show_status_messages
+    app._update_beam_global_time = Mock()
+    app.node_registry = Mock()
+    app.node_registry.update_node_status.return_value = True
+    app._refresh_node_view = Mock()
+    app._schedule_log = Mock()
+    packet = packet_module.StatusPacket(
+        node_id=255,
+        voltage_mv=0,
+        charge_percent=0,
+        command=12,
+        global_timestamp_ms=1234,
+    )
+
+    app._on_esp_response(packet.to_bytes())
+
+    app.node_registry.update_node_status.assert_called_once()
+    app._refresh_node_view.assert_called_once()
+    if show_status_messages:
+        app._schedule_log.assert_called_once_with("Node 255: V=0.00V, Charge=0%, Cmd=12")
+    else:
+        app._schedule_log.assert_not_called()
 
 
 def test_beam_binary_serial_stream_frames_partial_packets_without_newline_splitting() -> None:

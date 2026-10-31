@@ -72,6 +72,9 @@ Node │ Name        │ Cmd │ Actual Cmd │ Param │ Actual Param │ Volta
 - **Voltage** = Node's power supply voltage
 - **Charge** = Battery percentage (if battery-powered)
 
+For control-change messages, **Cmd** shows the CC value and **Param** is blank;
+the packet carries that value in its constant-command data.
+
 ## Troubleshooting
 
 ### "No MIDI ports detected"

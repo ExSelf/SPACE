@@ -80,6 +80,23 @@ def test_apply_midi_message_updates_all_listening_nodes_and_timestamps() -> None
     assert registry.recent_nodes() == []
 
 
+def test_control_change_update_clears_the_note_parameter() -> None:
+    registry = NodeRegistry(initialize_default_nodes=False)
+    node = NodeState(
+        number=1,
+        name="Node 1",
+        address="0x01",
+        parameter=60,
+        listen_channels=[True] + [False] * 15,
+    )
+    registry.add_node(node)
+
+    registry.apply_midi_message(channel=0, command=127, parameter=None)
+
+    assert node.command == 127
+    assert node.parameter is None
+
+
 def test_recent_nodes_only_returns_nodes_seen_within_the_window() -> None:
     registry = NodeRegistry(initialize_default_nodes=False)
     recent = NodeState(number=1, name="Recent", address="0x01", last_seen_at=time.time() - 30)

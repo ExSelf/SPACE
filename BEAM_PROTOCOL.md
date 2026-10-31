@@ -121,6 +121,10 @@ Packet:
   (remaining 11 bytes = 0)
 ```
 
+Control-change messages update the constant-command bytes, not the packet's
+`command` or `parameter` fields. In the tree, **Cmd** shows the CC value and
+**Param** is blank; note-on messages show the note and velocity.
+
 ## Node Configuration
 
 Nodes are configured in `node_settings.json` with:

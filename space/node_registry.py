@@ -196,7 +196,7 @@ class NodeRegistry:
 
         return [node for node in self.nodes if node.listen_channels[channel]]
 
-    def apply_midi_message(self, channel: int, command: int, parameter: int) -> None:
+    def apply_midi_message(self, channel: int, command: int, parameter: int | None) -> None:
         """Update every node that listens to the provided MIDI channel."""
         timestamp = time()
         for node in self.nodes:

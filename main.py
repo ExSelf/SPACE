@@ -146,12 +146,12 @@ def midi_to_packets(message: mido.Message, ttl: int = 3, node_registry: NodeRegi
     return [packet] if packet is not None else []
 
 
-def midi_to_registry_update(message: mido.Message) -> tuple[int, int, int] | None:
-    """Convert a MIDI message into the values applied to all matching nodes."""
+def midi_to_registry_update(message: mido.Message) -> tuple[int, int, int | None] | None:
+    """Convert a MIDI message into the command and parameter shown for matching nodes."""
     if message.type == "note_on":
         return message.channel, message.note, message.velocity
     if message.type == "control_change":
-        return message.channel, message.control, message.value
+        return message.channel, message.value, None
     return None
 
 
@@ -238,6 +238,9 @@ class BridgeWindow(QtWidgets.QWidget):
         self.stop_button = QtWidgets.QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_bridge)
         button_layout.addWidget(self.stop_button)
+        self.show_status_messages_checkbox = QtWidgets.QCheckBox("Show node status messages")
+        self.show_status_messages_checkbox.setChecked(False)
+        button_layout.addWidget(self.show_status_messages_checkbox)
         self.beam_indicator = QtWidgets.QLabel()
         self.beam_indicator.setFixedSize(12, 12)
         self.beam_indicator.setAccessibleName("BEAM communication status")
@@ -499,10 +502,11 @@ class BridgeWindow(QtWidgets.QWidget):
                 )
                 if updated:
                     self._refresh_node_view()
-                    self._schedule_log(
-                        f"Node {status_packet.node_id}: V={status_packet.voltage_mv/1000.0:.2f}V, "
-                        f"Charge={status_packet.charge_percent}%, Cmd={status_packet.command}"
-                    )
+                    if self.show_status_messages_checkbox.isChecked():
+                        self._schedule_log(
+                            f"Node {status_packet.node_id}: V={status_packet.voltage_mv/1000.0:.2f}V, "
+                            f"Charge={status_packet.charge_percent}%, Cmd={status_packet.command}"
+                        )
                 return
 
             command_packet = CommandPacket.from_bytes(payload)
@@ -537,7 +541,8 @@ class BridgeWindow(QtWidgets.QWidget):
                     node = response.get("node", "?")
                     voltage = response.get("voltage", "?")
                     charge = response.get("charge", "?")
-                    self._schedule_log(f"Node {node}: Voltage={voltage}V, Charge={charge}%")
+                    if self.show_status_messages_checkbox.isChecked():
+                        self._schedule_log(f"Node {node}: Voltage={voltage}V, Charge={charge}%")
                     self.node_registry.update_node_status(node, voltage, charge)
                     self._refresh_node_view()
 
