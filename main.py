@@ -404,9 +404,14 @@ class BridgeWindow(QtWidgets.QWidget):
             )
 
         packets = midi_to_packets(message, ttl, self.node_registry)
-        if self.serial_link is not None:
-            for packet in packets:
+        if packets and self.serial_link is None:
+            self._schedule_log("MIDI packet not sent: serial link is unavailable.")
+            return
+        for packet in packets:
+            try:
                 self.serial_link.send(packet)
+            except Exception as exc:
+                self._schedule_log(f"MIDI packet not sent: {exc}")
 
     def _get_elapsed_ms(self) -> int:
         """Get elapsed time in milliseconds since bridge start."""

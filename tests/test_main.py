@@ -83,6 +83,25 @@ def test_midi_channel_numbering_uses_human_facing_channel_labels() -> None:
     assert main.midi_to_registry_update(message) == (5, 60, 64)
 
 
+def test_process_midi_logs_serial_send_failure() -> None:
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app.ttl_slider = Mock()
+    app.ttl_slider.value.return_value = 3
+    app.node_registry = Mock()
+    app.node_registry.nodes_for_midi_channel.return_value = []
+    app.serial_link = Mock()
+    app.serial_link.send.side_effect = AttributeError("to_wire_payload is unavailable")
+    app._refresh_node_view = Mock()
+    app._schedule_log = Mock()
+
+    app._process_midi(mido.Message("note_on", channel=13, note=21, velocity=122))
+
+    assert any(
+        "MIDI packet not sent: to_wire_payload is unavailable" in call.args[0]
+        for call in app._schedule_log.call_args_list
+    )
+
+
 def test_serial_port_selection_prefers_usb_device_over_macos_pseudo_ports() -> None:
     ports = [
         "/dev/cu.debug-console",
