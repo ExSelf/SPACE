@@ -208,6 +208,16 @@ class NodeRegistry:
             node.parameter = parameter
             node.command_timestamp = timestamp
 
+    def update_sent_command(self, node_number: int, command: int, parameter: int | None) -> bool:
+        """Record a command successfully sent to one node."""
+        node = self.get_node(node_number)
+        if node is None:
+            return False
+        node.command = command
+        node.parameter = parameter
+        node.command_timestamp = time()
+        return True
+
     def update_node_status(self, node_number: int, voltage: float | None = None, 
                           charge: int | None = None, actual_command: int | None = None,
                           actual_parameter: int | None = None) -> bool:

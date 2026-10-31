@@ -106,7 +106,7 @@ The bridge translates MIDI messages into command packets:
 MIDI Note On (channel, note, velocity)
     ↓
 Packet:
-  node = channel + 1
+  node = each node with a status report received in the last 60 seconds
   command = note (60-127)
   parameter = velocity (0-127)
 ```
@@ -116,7 +116,7 @@ Packet:
 MIDI CC (channel, controller, value)
     ↓
 Packet:
-  node = channel + 1
+  node = each node with a status report received in the last 60 seconds
   constant_commands[0] = CC value
   (remaining 11 bytes = 0)
 ```
@@ -130,9 +130,9 @@ Control-change messages update the constant-command bytes, not the packet's
 Nodes are configured in `node_settings.json` with:
 - **number:** Node ID (1-255)
 - **name:** Display name
-- **listen_channels:** Array of 16 booleans
-  - When a MIDI channel is enabled for a node, all note_on/control_change messages on that channel trigger the node
-  - This allows one MIDI channel to control multiple nodes or one node to listen to multiple MIDI channels
+- **listen_channels:** Array of 16 saved booleans. Current packet routing targets all
+  nodes that reported status in the last 60 seconds, regardless of MIDI channel.
+  These saved assignments do not affect routing.
 
 **Example:**
 ```json

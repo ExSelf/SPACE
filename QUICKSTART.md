@@ -43,18 +43,12 @@ python main.py
 
 **Default: 3** - works for most setups
 
-## Assigning Nodes to MIDI Channels
+## MIDI Routing
 
-By default, all nodes listen to all MIDI channels. To change this:
-
-1. Select a node in the tree view
-2. In the "Node channels" panel, check which MIDI channels control that node
-3. Settings are saved automatically
-
-**Example:**
-- Node 1 "Front Light" → Check only "Ch 1"
-- Node 2 "Back Light" → Check only "Ch 2"
-- Now MIDI channel 1 only controls Front Light
+MIDI messages are sent to nodes that have reported status within the last
+60 seconds. MIDI channel assignments saved in the node settings do not affect
+routing. This lets a single online node (for example, Node 255) receive MIDI
+regardless of the MIDI channel selected by the DAW.
 
 ## What the Tree View Shows
 
@@ -95,7 +89,7 @@ the packet carries that value in its constant-command data.
 - Check BEAM controller is powered and connected
 
 ### Status shows zeros or doesn't update
-- Verify MIDI channel assignments (node must listen to the channel you're using)
+- Verify that the node has sent a status update within the last 60 seconds
 - Check that MIDI is actually being sent from DAW
 - Try with a different MIDI channel
 - Increase TTL value

@@ -69,7 +69,9 @@ The tree view now shows real-time:
 5. Play MIDI notes from your DAW
 
 ### Configure Nodes
-Edit `node_settings.json` to set node names and which MIDI channels they listen to:
+Edit `node_settings.json` to set node names and saved MIDI channel assignments.
+MIDI packets are routed to nodes that have reported status within the last
+60 seconds, regardless of those assignments.
 ```json
 {
   "nodes": [

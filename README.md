@@ -21,7 +21,7 @@ DAW (MIDI Output) → SPACE Bridge → BEAM Controller → SUN Nodes
 - **Receives** status updates from SUN nodes (voltage, charge, command execution state)
 - **Displays** real-time node status in a tree view UI
 - **Routes** commands through BEAM mesh with configurable Time-To-Live (1-12 hops)
-- **Persists** node configuration (names, MIDI channel assignments) to JSON
+- **Persists** node configuration (names and saved MIDI channel assignments) to JSON
 
 ## Features
 
@@ -34,7 +34,7 @@ DAW (MIDI Output) → SPACE Bridge → BEAM Controller → SUN Nodes
   - Command/parameter sent and actual executing
   - Supply voltage and battery charge
   - Last update timestamp
-- **Channel Configuration:** Assign MIDI channels to nodes
+- **MIDI Routing:** Send messages to nodes with status received within the last 60 seconds, regardless of MIDI channel
 
 ### Protocol
 - **Command Packets:** CSV format with TTL, node ID, timestamp, 12 command bytes
@@ -76,7 +76,7 @@ python main.py
 
 ### Node Settings (`node_settings.json`)
 
-Configure which MIDI channels control which nodes:
+Configure node names and save per-node MIDI channel assignments:
 
 ```json
 {
@@ -154,4 +154,3 @@ The executable will be in the `dist/` folder.
 ## License
 
 See LICENSE file.
-

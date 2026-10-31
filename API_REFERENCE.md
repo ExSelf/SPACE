@@ -159,28 +159,21 @@ Individual node status and configuration.
 - `voltage`: float | None - Supply voltage
 - `charge`: int | None - Battery charge percentage
 - `last_timestamp_received`: str | None - Last update timestamp (formatted)
-- `listen_channels`: List[bool] - 16 MIDI channels (True = listen)
+- `listen_channels`: List[bool] - Saved MIDI channel assignments (not used for current packet routing)
 
 ## Usage Patterns
 
-### MIDI Command Forwarding
+### MIDI Command Forwarding to Online Nodes
 
 ```python
-from space.packet import Packet
+from main import midi_to_packets
 
-def handle_midi_message(message, ttl, registry):
-    if message.type == "note_on":
-        node = message.channel + 1  # MIDI channel → node ID
-        packet = Packet(
-            type="command",
-            ttl=ttl,
-            node=node,
-            command=message.note,
-            parameter=message.velocity
-        )
-        return packet
-    return None
+packets = midi_to_packets(message, ttl=3, node_registry=registry)
 ```
+
+With a registry, this creates one packet for every node that reported status
+within the last 60 seconds. MIDI channel assignments do not determine packet
+destinations. If no node is online, no packets are returned.
 
 ### Status Update Callback
 

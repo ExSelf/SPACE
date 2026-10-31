@@ -8,6 +8,7 @@ import pytest
 import main
 import space.midi_input as midi_input
 from space import packet as packet_module
+from space.node_registry import NodeRegistry, NodeState
 from space.serial_link import SerialLink, extract_status_frames
 
 
@@ -95,12 +96,44 @@ def test_control_change_shows_its_value_as_the_command() -> None:
     assert packet.constant_commands[0] == 127
 
 
+def test_midi_packets_target_recent_nodes_not_channel_assignments() -> None:
+    registry = NodeRegistry(initialize_default_nodes=False)
+    offline_assigned = NodeState(
+        number=3,
+        name="Offline",
+        address="0x03",
+        listen_channels=[False] * 13 + [True] + [False] * 2,
+    )
+    online = NodeState(number=255, name="Online", address="0xff")
+    registry.add_node(offline_assigned)
+    registry.add_node(online)
+    registry.update_node_status(node_number=255)
+
+    packets = main.midi_to_packets(
+        mido.Message("note_on", channel=13, note=60, velocity=100),
+        node_registry=registry,
+    )
+
+    assert [packet.node_id for packet in packets] == [255]
+
+
+def test_midi_packets_do_not_fall_back_to_channel_node_when_none_are_online() -> None:
+    registry = NodeRegistry(initialize_default_nodes=True)
+
+    packets = main.midi_to_packets(
+        mido.Message("note_on", channel=13, note=60, velocity=100),
+        node_registry=registry,
+    )
+
+    assert packets == []
+
+
 def test_process_midi_logs_serial_send_failure() -> None:
     app = main.BridgeApp.__new__(main.BridgeApp)
     app.ttl_slider = Mock()
     app.ttl_slider.value.return_value = 3
     app.node_registry = Mock()
-    app.node_registry.nodes_for_midi_channel.return_value = []
+    app.node_registry.recent_nodes.return_value = [NodeState(number=1, name="Node 1", address="0x01")]
     app.serial_link = Mock()
     app.serial_link.send.side_effect = AttributeError("to_wire_payload is unavailable")
     app._refresh_node_view = Mock()
@@ -112,6 +145,28 @@ def test_process_midi_logs_serial_send_failure() -> None:
         "MIDI packet not sent: to_wire_payload is unavailable" in call.args[0]
         for call in app._schedule_log.call_args_list
     )
+
+
+def test_process_midi_updates_the_online_node_after_successful_send() -> None:
+    registry = NodeRegistry(initialize_default_nodes=False)
+    node = NodeState(number=255, name="Node 255", address="0xff")
+    registry.add_node(node)
+    registry.update_node_status(node_number=255)
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app.ttl_slider = Mock()
+    app.ttl_slider.value.return_value = 3
+    app.node_registry = registry
+    app.serial_link = Mock()
+    app._refresh_node_view = Mock()
+    app._schedule_log = Mock()
+
+    app._process_midi(mido.Message("note_on", channel=13, note=60, velocity=100))
+
+    assert node.command == 60
+    assert node.parameter == 100
+    app.serial_link.send.assert_called_once()
+    assert app.serial_link.send.call_args.args[0].node_id == 255
+    app._refresh_node_view.assert_called_once()
 
 
 def test_serial_link_sends_binary_packet_with_beam_line_terminator() -> None:

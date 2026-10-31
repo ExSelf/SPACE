@@ -132,15 +132,14 @@ def midi_to_packet(message: mido.Message, ttl: int = 3, node_id: int | None = No
 
 
 def midi_to_packets(message: mido.Message, ttl: int = 3, node_registry: NodeRegistry | None = None) -> list[CommandPacket]:
-    """Map a MIDI message to all target nodes that listen to that MIDI channel."""
+    """Map a MIDI message to all recently active nodes."""
     if node_registry is not None:
-        targets = [node.number for node in node_registry.nodes_for_midi_channel(message.channel)]
-        if targets:
-            return [
-                midi_to_packet(message, ttl=ttl, node_id=node_id)
-                for node_id in targets
-                if midi_to_packet(message, ttl=ttl, node_id=node_id) is not None
-            ]
+        packets = []
+        for node in node_registry.recent_nodes():
+            packet = midi_to_packet(message, ttl=ttl, node_id=node.number)
+            if packet is not None:
+                packets.append(packet)
+        return packets
 
     packet = midi_to_packet(message, ttl=ttl)
     return [packet] if packet is not None else []
@@ -276,7 +275,7 @@ class BridgeWindow(QtWidgets.QWidget):
         self.node_tree.header().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         layout.addWidget(self.node_tree, 5, 0, 1, 2)
 
-        self.channel_panel = QtWidgets.QGroupBox("Node channels")
+        self.channel_panel = QtWidgets.QGroupBox("Saved channel assignments (not used for routing)")
         channel_layout = QtWidgets.QGridLayout()
         self.channel_vars: list[QtWidgets.QCheckBox] = []
         for index in range(16):
@@ -399,22 +398,33 @@ class BridgeWindow(QtWidgets.QWidget):
         update = midi_to_registry_update(message)
         if update is not None:
             channel, command, parameter = update
-            self.node_registry.apply_midi_message(channel=channel, command=command, parameter=parameter)
-            self._refresh_node_view()
             self._schedule_log(
                 f"MIDI {message.type} -> channel {midi_channel_number(channel)} "
                 f"cmd {command} param {parameter}"
             )
 
         packets = midi_to_packets(message, ttl, self.node_registry)
+        if update is not None and not packets:
+            self._schedule_log("MIDI packet not sent: no nodes have reported status in the last 60 seconds.")
+            return
         if packets and self.serial_link is None:
             self._schedule_log("MIDI packet not sent: serial link is unavailable.")
             return
+        updated_node = False
         for packet in packets:
             try:
                 self.serial_link.send(packet)
             except Exception as exc:
                 self._schedule_log(f"MIDI packet not sent: {exc}")
+            else:
+                if update is not None:
+                    updated_node = self.node_registry.update_sent_command(
+                        node_number=packet.node_id,
+                        command=command,
+                        parameter=parameter,
+                    ) or updated_node
+        if updated_node:
+            self._refresh_node_view()
 
     def _get_elapsed_ms(self) -> int:
         """Get elapsed time in milliseconds since bridge start."""
