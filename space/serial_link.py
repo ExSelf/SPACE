@@ -103,17 +103,23 @@ class SerialLink:
             return None
 
     def send(self, packet) -> None:
-        """Send a packet to the serial device."""
+        """Send a 250-byte binary packet as one BEAM USB line."""
         if self.on_packet is not None:
             self.on_packet(packet)
 
         if not self.is_open():
             return
 
-        payload = packet.to_wire_payload() + b"\n"
+        payload = packet.to_bytes()
+        if len(payload) != PACKET_SIZE:
+            raise ValueError(f"Expected a {PACKET_SIZE}-byte packet, got {len(payload)}")
+        if b"\n" in payload:
+            raise ValueError("BEAM USB line framing cannot carry a packet containing a newline byte")
+
+        payload += b"\n"
         self._serial.write(payload)
         self._serial.flush()
-        print(f"Sent: {payload.decode('utf-8', errors='ignore')}")
+        print(f"Sent {PACKET_SIZE}-byte binary packet to {self.port}")
 
     def close(self) -> None:
         """Close the serial connection and stop the receive thread."""

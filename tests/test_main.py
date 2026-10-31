@@ -3,11 +3,12 @@ from __future__ import annotations
 from unittest.mock import Mock, patch
 
 import mido
+import pytest
 
 import main
 import space.midi_input as midi_input
 from space import packet as packet_module
-from space.serial_link import extract_status_frames
+from space.serial_link import SerialLink, extract_status_frames
 
 
 class DummyButton:
@@ -100,6 +101,40 @@ def test_process_midi_logs_serial_send_failure() -> None:
         "MIDI packet not sent: to_wire_payload is unavailable" in call.args[0]
         for call in app._schedule_log.call_args_list
     )
+
+
+def test_serial_link_sends_binary_packet_with_beam_line_terminator() -> None:
+    link = SerialLink("/dev/cu.usbmodem01", 115200)
+    link._serial = Mock(is_open=True)
+    packet = packet_module.CommandPacket(
+        node_id=14,
+        ttl=3,
+        command=21,
+        parameter=122,
+        global_timestamp_ms=0x12345678,
+    )
+
+    link.send(packet)
+
+    link._serial.write.assert_called_once_with(packet.to_bytes() + b"\n")
+    link._serial.flush.assert_called_once_with()
+
+
+def test_serial_link_rejects_binary_packet_containing_beam_line_delimiter() -> None:
+    link = SerialLink("/dev/cu.usbmodem01", 115200)
+    link._serial = Mock(is_open=True)
+    packet = packet_module.CommandPacket(
+        node_id=14,
+        ttl=3,
+        command=21,
+        parameter=10,
+        global_timestamp_ms=0x12345678,
+    )
+
+    with pytest.raises(ValueError, match="cannot carry a packet containing a newline byte"):
+        link.send(packet)
+
+    link._serial.write.assert_not_called()
 
 
 def test_serial_port_selection_prefers_usb_device_over_macos_pseudo_ports() -> None:
