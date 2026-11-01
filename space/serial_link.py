@@ -113,8 +113,8 @@ class SerialLink:
         payload = packet.to_bytes()
         if len(payload) != PACKET_SIZE:
             raise ValueError(f"Expected a {PACKET_SIZE}-byte packet, got {len(payload)}")
-        if b"\n" in payload:
-            raise ValueError("BEAM USB line framing cannot carry a packet containing a newline byte")
+        if b"\r" in payload or b"\n" in payload:
+            raise ValueError("BEAM USB line framing cannot carry carriage-return or newline bytes")
 
         payload += b"\n"
         self._serial.write(payload)

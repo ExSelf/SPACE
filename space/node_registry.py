@@ -20,6 +20,8 @@ class NodeState:
     actual_parameter: int | None = None
     command_timestamp: float | None = None
     command_timestamp_actual: float | None = None
+    command_timestamp_ms: int | None = None
+    actual_command_timestamp_ms: int | None = None
     constant_commands: List[int] = field(default_factory=lambda: [0] * 12)
     actual_constant_commands: List[int] = field(default_factory=lambda: [0] * 12)
     voltage: float | None = None
@@ -218,9 +220,24 @@ class NodeRegistry:
         node.command_timestamp = time()
         return True
 
+    def update_desired_command(self, node_number: int, command: int, parameter: int,
+                               constant_commands: bytes, command_timestamp_ms: int) -> bool:
+        """Store the full command state SPACE is retrying until SUN confirms it."""
+        node = self.get_node(node_number)
+        if node is None:
+            return False
+        node.command = command
+        node.parameter = parameter
+        node.constant_commands = list(constant_commands[:12].ljust(12, b"\x00"))
+        node.command_timestamp = time()
+        node.command_timestamp_ms = command_timestamp_ms & 0xFFFFFFFF
+        return True
+
     def update_node_status(self, node_number: int, voltage: float | None = None, 
                           charge: int | None = None, actual_command: int | None = None,
-                          actual_parameter: int | None = None) -> bool:
+                          actual_parameter: int | None = None,
+                          actual_constant_commands: bytes | None = None,
+                          actual_command_timestamp_ms: int | None = None) -> bool:
         """
         Update a node's actual status from a status packet received from the node.
         Returns True if the node was found and updated, False otherwise.
@@ -238,6 +255,17 @@ class NodeRegistry:
                 if actual_parameter is not None:
                     node.actual_parameter = actual_parameter
                     node.command_timestamp_actual = now
+                if actual_constant_commands is not None:
+                    node.actual_constant_commands = list(actual_constant_commands[:12].ljust(12, b"\x00"))
+                if actual_command_timestamp_ms is not None:
+                    node.actual_command_timestamp_ms = actual_command_timestamp_ms
+                if node.command_timestamp_ms is None:
+                    if actual_command is not None:
+                        node.command = actual_command
+                    if actual_parameter is not None:
+                        node.parameter = actual_parameter
+                    if actual_constant_commands is not None:
+                        node.constant_commands = list(actual_constant_commands[:12].ljust(12, b"\x00"))
                 node.last_seen_at = now
 
                 # Format timestamp as readable string

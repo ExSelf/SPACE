@@ -50,6 +50,9 @@ def test_start_bridge_keeps_running_when_serial_open_fails() -> None:
     app = main.BridgeApp.__new__(main.BridgeApp)
     app.running = False
     app._beam_status_timer = Mock()
+    app._command_retry_timer = Mock()
+    app._pending_commands = {}
+    app._command_send_errors = {}
     app._refresh_beam_indicator = Mock()
     app.start_button = DummyButton()
     app.root = Mock()
@@ -96,7 +99,7 @@ def test_control_change_shows_its_value_as_the_command() -> None:
     assert packet.constant_commands[0] == 127
 
 
-def test_midi_packets_target_recent_nodes_not_channel_assignments() -> None:
+def test_midi_packets_target_nodes_configured_for_the_channel() -> None:
     registry = NodeRegistry(initialize_default_nodes=False)
     offline_assigned = NodeState(
         number=3,
@@ -114,7 +117,7 @@ def test_midi_packets_target_recent_nodes_not_channel_assignments() -> None:
         node_registry=registry,
     )
 
-    assert [packet.node_id for packet in packets] == [255]
+    assert [packet.node_id for packet in packets] == [3]
 
 
 def test_midi_packets_do_not_fall_back_to_channel_node_when_none_are_online() -> None:
@@ -133,23 +136,32 @@ def test_process_midi_logs_serial_send_failure() -> None:
     app.ttl_slider = Mock()
     app.ttl_slider.value.return_value = 3
     app.node_registry = Mock()
-    app.node_registry.recent_nodes.return_value = [NodeState(number=1, name="Node 1", address="0x01")]
+    node = NodeState(number=1, name="Node 1", address="0x01")
+    app.node_registry.nodes_for_midi_channel.return_value = [node]
+    app.node_registry.get_node.return_value = node
     app.serial_link = Mock()
     app.serial_link.send.side_effect = AttributeError("to_wire_payload is unavailable")
     app._refresh_node_view = Mock()
     app._schedule_log = Mock()
+    app._pending_commands = {}
+    app._command_send_errors = {}
 
     app._process_midi(mido.Message("note_on", channel=13, note=21, velocity=122))
 
     assert any(
-        "MIDI packet not sent: to_wire_payload is unavailable" in call.args[0]
+        "MIDI packet not sent to node 1: to_wire_payload is unavailable" in call.args[0]
         for call in app._schedule_log.call_args_list
     )
 
 
 def test_process_midi_updates_the_online_node_after_successful_send() -> None:
     registry = NodeRegistry(initialize_default_nodes=False)
-    node = NodeState(number=255, name="Node 255", address="0xff")
+    node = NodeState(
+        number=255,
+        name="Node 255",
+        address="0xff",
+        listen_channels=[False] * 13 + [True] + [False] * 2,
+    )
     registry.add_node(node)
     registry.update_node_status(node_number=255)
     app = main.BridgeApp.__new__(main.BridgeApp)
@@ -159,6 +171,8 @@ def test_process_midi_updates_the_online_node_after_successful_send() -> None:
     app.serial_link = Mock()
     app._refresh_node_view = Mock()
     app._schedule_log = Mock()
+    app._pending_commands = {}
+    app._command_send_errors = {}
 
     app._process_midi(mido.Message("note_on", channel=13, note=60, velocity=100))
 
@@ -167,6 +181,51 @@ def test_process_midi_updates_the_online_node_after_successful_send() -> None:
     app.serial_link.send.assert_called_once()
     assert app.serial_link.send.call_args.args[0].node_id == 255
     app._refresh_node_view.assert_called_once()
+    assert 255 in app._pending_commands
+
+
+def test_command_retries_every_call_until_sun_reports_full_state_and_timestamp() -> None:
+    registry = NodeRegistry(initialize_default_nodes=False)
+    node = NodeState(
+        number=14,
+        name="Node 14",
+        address="0x0e",
+        listen_channels=[False] * 13 + [True] + [False] * 2,
+    )
+    registry.add_node(node)
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app.ttl_slider = Mock()
+    app.ttl_slider.value.return_value = 3
+    app.node_registry = registry
+    app.serial_link = Mock()
+    app.serial_link.is_open.return_value = True
+    app._refresh_node_view = Mock()
+    app._schedule_log = Mock()
+    app._pending_commands = {}
+    app._command_send_errors = {}
+
+    app._process_midi(mido.Message("note_on", channel=13, note=21, velocity=122))
+    packet = app._pending_commands[14]
+    assert packet.command == 21
+    assert packet.parameter == 122
+    assert len(packet.constant_commands) == 12
+    assert packet.cmd_timestamp_ms != 0
+    assert app.serial_link.send.call_count == 1
+
+    app._retry_pending_commands()
+    assert app.serial_link.send.call_count == 2
+
+    registry.update_node_status(
+        node_number=14,
+        actual_command=packet.command,
+        actual_parameter=packet.parameter,
+        actual_constant_commands=packet.constant_commands,
+        actual_command_timestamp_ms=packet.cmd_timestamp_ms,
+    )
+    app._retry_pending_commands()
+
+    assert app.serial_link.send.call_count == 2
+    assert 14 not in app._pending_commands
 
 
 def test_serial_link_sends_binary_packet_with_beam_line_terminator() -> None:
@@ -186,18 +245,19 @@ def test_serial_link_sends_binary_packet_with_beam_line_terminator() -> None:
     link._serial.flush.assert_called_once_with()
 
 
-def test_serial_link_rejects_binary_packet_containing_beam_line_delimiter() -> None:
+@pytest.mark.parametrize("delimiter", [b"\n", b"\r"])
+def test_serial_link_rejects_binary_packet_containing_beam_line_delimiter(delimiter: bytes) -> None:
     link = SerialLink("/dev/cu.usbmodem01", 115200)
     link._serial = Mock(is_open=True)
     packet = packet_module.CommandPacket(
         node_id=14,
         ttl=3,
         command=21,
-        parameter=10,
+        parameter=delimiter[0],
         global_timestamp_ms=0x12345678,
     )
 
-    with pytest.raises(ValueError, match="cannot carry a packet containing a newline byte"):
+    with pytest.raises(ValueError, match="cannot carry carriage-return or newline bytes"):
         link.send(packet)
 
     link._serial.write.assert_not_called()
@@ -244,6 +304,9 @@ def test_start_bridge_routes_serial_responses_to_gui_thread() -> None:
     app = main.BridgeApp.__new__(main.BridgeApp)
     app.running = False
     app._beam_status_timer = Mock()
+    app._command_retry_timer = Mock()
+    app._pending_commands = {}
+    app._command_send_errors = {}
     app._refresh_beam_indicator = Mock()
     app.start_button = DummyButton()
     app.midi_input = None

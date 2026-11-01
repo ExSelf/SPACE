@@ -123,6 +123,31 @@ def test_received_node_status_marks_only_that_node_as_recent() -> None:
     assert registry.recent_nodes() == [node_255]
 
 
+def test_first_status_seeds_desired_state_without_overwriting_pending_command() -> None:
+    registry = NodeRegistry(initialize_default_nodes=False)
+    node = NodeState(number=14, name="Node 14", address="0x0e")
+    registry.add_node(node)
+
+    registry.update_node_status(
+        node_number=14,
+        actual_command=21,
+        actual_parameter=122,
+        actual_constant_commands=bytes(range(12)),
+        actual_command_timestamp_ms=456,
+    )
+
+    assert node.command == 21
+    assert node.parameter == 122
+    assert node.constant_commands == list(range(12))
+
+    registry.update_desired_command(14, 30, 90, bytes(range(12)), 789)
+    registry.update_node_status(node_number=14, actual_command=21, actual_parameter=122)
+
+    assert node.command == 30
+    assert node.parameter == 90
+    assert node.command_timestamp_ms == 789
+
+
 def test_nodes_for_midi_channel_uses_configured_listen_channels() -> None:
     registry = NodeRegistry(initialize_default_nodes=False)
     node_1 = NodeState(number=1, name="Node 1", address="0x01", listen_channels=[False] * 16)

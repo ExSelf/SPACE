@@ -132,12 +132,21 @@ def midi_to_packet(message: mido.Message, ttl: int = 3, node_id: int | None = No
 
 
 def midi_to_packets(message: mido.Message, ttl: int = 3, node_registry: NodeRegistry | None = None) -> list[CommandPacket]:
-    """Map a MIDI message to all recently active nodes."""
+    """Map a MIDI message to nodes configured to listen to its channel."""
     if node_registry is not None:
         packets = []
-        for node in node_registry.recent_nodes():
+        for node in node_registry.nodes_for_midi_channel(message.channel):
             packet = midi_to_packet(message, ttl=ttl, node_id=node.number)
             if packet is not None:
+                if message.type == "note_on":
+                    packet.constant_commands = bytes(node.constant_commands)
+                elif message.type == "control_change":
+                    constants = bytearray(node.constant_commands[:12])
+                    constants.extend(bytes(12 - len(constants)))
+                    constants[0] = message.value
+                    packet.constant_commands = bytes(constants)
+                    packet.command = node.command if node.command is not None else (node.actual_command or 0)
+                    packet.parameter = node.parameter if node.parameter is not None else (node.actual_parameter or 0)
                 packets.append(packet)
         return packets
 
@@ -152,6 +161,16 @@ def midi_to_registry_update(message: mido.Message) -> tuple[int, int, int | None
     if message.type == "control_change":
         return message.channel, message.value, None
     return None
+
+
+def command_packet_matches_node(packet: CommandPacket, node: NodeState) -> bool:
+    """Return whether SUN has reported the complete state and command timestamp."""
+    return (
+        node.actual_command == packet.command
+        and node.actual_parameter == packet.parameter
+        and bytes(node.actual_constant_commands) == packet.constant_commands
+        and node.actual_command_timestamp_ms == packet.cmd_timestamp_ms
+    )
 
 
 class BridgeWindow(QtWidgets.QWidget):
@@ -185,6 +204,11 @@ class BridgeWindow(QtWidgets.QWidget):
         self._beam_status_timer = QtCore.QTimer(self)
         self._beam_status_timer.setInterval(100)
         self._beam_status_timer.timeout.connect(self._refresh_beam_indicator)
+        self._command_retry_timer = QtCore.QTimer(self)
+        self._command_retry_timer.setInterval(10)
+        self._command_retry_timer.timeout.connect(self._retry_pending_commands)
+        self._pending_commands: dict[int, CommandPacket] = {}
+        self._command_send_errors: dict[int, str] = {}
         self._set_beam_indicator("stopped")
         self._populate_ports()
         self._refresh_node_view()
@@ -405,26 +429,53 @@ class BridgeWindow(QtWidgets.QWidget):
 
         packets = midi_to_packets(message, ttl, self.node_registry)
         if update is not None and not packets:
-            self._schedule_log("MIDI packet not sent: no nodes have reported status in the last 60 seconds.")
+            self._schedule_log(
+                f"MIDI packet not sent: no nodes are configured for channel {midi_channel_number(message.channel)}."
+            )
             return
         if packets and self.serial_link is None:
             self._schedule_log("MIDI packet not sent: serial link is unavailable.")
             return
-        updated_node = False
+        command_timestamp_ms = int(time.monotonic() * 1000) & 0xFFFFFFFF
         for packet in packets:
+            packet.cmd_timestamp_ms = command_timestamp_ms
+            self._pending_commands[packet.node_id] = packet
+            self._command_send_errors.pop(packet.node_id, None)
+            self.node_registry.update_desired_command(
+                node_number=packet.node_id,
+                command=packet.command,
+                parameter=packet.parameter,
+                constant_commands=packet.constant_commands,
+                command_timestamp_ms=packet.cmd_timestamp_ms,
+            )
+        if packets:
+            self._refresh_node_view()
+            self._retry_pending_commands()
+
+    def _retry_pending_commands(self) -> None:
+        """Resend each node's desired state every 10 ms until SUN confirms it."""
+        if self.serial_link is None or not self.serial_link.is_open():
+            return
+
+        for node_number, packet in list(self._pending_commands.items()):
+            node = self.node_registry.get_node(node_number)
+            if node is None:
+                self._pending_commands.pop(node_number, None)
+                continue
+            if command_packet_matches_node(packet, node):
+                self._pending_commands.pop(node_number, None)
+                self._command_send_errors.pop(node_number, None)
+                continue
+
             try:
                 self.serial_link.send(packet)
             except Exception as exc:
-                self._schedule_log(f"MIDI packet not sent: {exc}")
+                error = str(exc)
+                if self._command_send_errors.get(node_number) != error:
+                    self._schedule_log(f"MIDI packet not sent to node {node_number}: {error}")
+                    self._command_send_errors[node_number] = error
             else:
-                if update is not None:
-                    updated_node = self.node_registry.update_sent_command(
-                        node_number=packet.node_id,
-                        command=command,
-                        parameter=parameter,
-                    ) or updated_node
-        if updated_node:
-            self._refresh_node_view()
+                self._command_send_errors.pop(node_number, None)
 
     def _get_elapsed_ms(self) -> int:
         """Get elapsed time in milliseconds since bridge start."""
@@ -439,6 +490,8 @@ class BridgeWindow(QtWidgets.QWidget):
         self.start_time = time.time()
         self._beam_monitor_started_at = None
         self._beam_global_time_received_at = None
+        self._pending_commands.clear()
+        self._command_send_errors.clear()
         self._beam_status_timer.start()
         self._refresh_beam_indicator()
         self._log("Starting bridge...")
@@ -463,6 +516,7 @@ class BridgeWindow(QtWidgets.QWidget):
             self._beam_monitor_started_at = time.monotonic()
             self._log("Serial link ready.")
             self._refresh_beam_indicator()
+            self._command_retry_timer.start()
         except Exception as exc:
             self._log(f"Serial link unavailable: {exc}")
             self.serial_link = None
@@ -482,6 +536,9 @@ class BridgeWindow(QtWidgets.QWidget):
             return
         self.running = False
         self._beam_monitor_started_at = None
+        self._command_retry_timer.stop()
+        self._pending_commands.clear()
+        self._command_send_errors.clear()
         self._beam_status_timer.stop()
         self._refresh_beam_indicator()
         self.start_button.setEnabled(True)
@@ -491,7 +548,7 @@ class BridgeWindow(QtWidgets.QWidget):
             self.serial_link.close()
         self._log("Bridge stopped.")
 
-    def _on_status_packet(self, packet: Packet) -> None:
+    def _on_status_packet(self, packet: CommandPacket) -> None:
         pass
 
     def _on_esp_response(self, data: bytes) -> None:
@@ -509,6 +566,8 @@ class BridgeWindow(QtWidgets.QWidget):
                     charge=status_packet.charge_percent,
                     actual_command=status_packet.command,
                     actual_parameter=status_packet.parameter,
+                    actual_constant_commands=status_packet.constant_commands,
+                    actual_command_timestamp_ms=status_packet.cmd_timestamp_ms,
                 )
                 if updated:
                     self._refresh_node_view()
