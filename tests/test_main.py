@@ -38,6 +38,32 @@ class DummyCombo:
     def currentText(self) -> str:
         return self.value
 
+class DummyPortCombo:
+    def __init__(self, items: list[str], current: str = "") -> None:
+        self.items = items
+        self.current = current or (items[0] if items else "")
+
+    def currentText(self) -> str:
+        return self.current
+
+    def count(self) -> int:
+        return len(self.items)
+
+    def itemText(self, index: int) -> str:
+        return self.items[index]
+
+    def clear(self) -> None:
+        self.items = []
+        self.current = ""
+
+    def addItems(self, items: list[str]) -> None:
+        self.items.extend(items)
+        if not self.current and self.items:
+            self.current = self.items[0]
+
+    def setCurrentIndex(self, index: int) -> None:
+        self.current = self.items[index]
+
 
 def test_list_input_ports_uses_windows_fallback_when_mido_is_unavailable() -> None:
     with patch("space.midi_input.platform.system", return_value="Windows"), patch(
@@ -53,6 +79,7 @@ def test_start_bridge_keeps_running_when_serial_open_fails() -> None:
     app._command_retry_timer = Mock()
     app._pending_commands = {}
     app._command_send_errors = {}
+    app._serial_ports = []
     app._refresh_beam_indicator = Mock()
     app.start_button = DummyButton()
     app.root = Mock()
@@ -277,6 +304,31 @@ def test_serial_port_selection_prefers_usb_device_over_macos_pseudo_ports() -> N
     assert main.preferred_serial_port_index(["/dev/cu.usbmodem02", "/dev/cu.usbmodem01"]) == 1
     assert main.preferred_serial_port_index(["COM3", "COM4"]) == 0
 
+def test_serial_port_scan_discovers_and_connects_new_usb_device() -> None:
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app.serial_combo = DummyPortCombo(["(no serial ports)"])
+    app._serial_ports = []
+    app.running = True
+    app.serial_link = None
+    app._beam_monitor_started_at = None
+    app._last_serial_connect_error = None
+    app._command_retry_timer = Mock()
+    app._refresh_beam_indicator = Mock()
+    app._schedule_log = Mock()
+
+    with patch("main.SerialLink") as serial_cls:
+        serial_cls.list_ports.return_value = ["/dev/cu.usbmodem01"]
+        serial_instance = serial_cls.return_value
+        serial_instance.is_open.return_value = True
+
+        app._refresh_serial_ports()
+
+    assert app.serial_combo.items == ["/dev/cu.usbmodem01"]
+    assert app.serial_combo.currentText() == "/dev/cu.usbmodem01"
+    assert app.serial_link is serial_instance
+    serial_instance.open.assert_called_once_with()
+    app._command_retry_timer.start.assert_called_once_with()
+
 
 def test_global_time_formats_milliseconds_as_hours_minutes_seconds() -> None:
     assert main.format_global_time(3_723_000) == "01:02:03"
@@ -307,12 +359,13 @@ def test_start_bridge_routes_serial_responses_to_gui_thread() -> None:
     app._command_retry_timer = Mock()
     app._pending_commands = {}
     app._command_send_errors = {}
+    app._serial_ports = ["/dev/cu.usbmodem01"]
     app._refresh_beam_indicator = Mock()
     app.start_button = DummyButton()
     app.midi_input = None
     app.serial_link = None
     app.midi_combo = DummyCombo("(no MIDI ports)")
-    app.serial_combo = DummyCombo("(no serial ports)")
+    app.serial_combo = DummyCombo("/dev/cu.usbmodem01")
     app.log_text = Mock()
     app._log = Mock()
     app._schedule_log = Mock()

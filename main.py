@@ -209,8 +209,14 @@ class BridgeWindow(QtWidgets.QWidget):
         self._command_retry_timer.timeout.connect(self._retry_pending_commands)
         self._pending_commands: dict[int, CommandPacket] = {}
         self._command_send_errors: dict[int, str] = {}
+        self._serial_ports: list[str] = []
+        self._last_serial_connect_error: str | None = None
         self._set_beam_indicator("stopped")
         self._populate_ports()
+        self._serial_scan_timer = QtCore.QTimer(self)
+        self._serial_scan_timer.setInterval(1000)
+        self._serial_scan_timer.timeout.connect(self._refresh_serial_ports)
+        self._serial_scan_timer.start()
         self._refresh_node_view()
 
     def _build_ui(self) -> None:
@@ -317,18 +323,75 @@ class BridgeWindow(QtWidgets.QWidget):
 
     def _populate_ports(self) -> None:
         midi_ports = list_input_ports()
-        serial_ports = usable_serial_ports(SerialLink.list_ports())
-
         self.midi_combo.clear()
-        self.serial_combo.clear()
-
         self.midi_combo.addItems(midi_ports or ["(no MIDI ports)"])
-        self.serial_combo.addItems(serial_ports or ["(no serial ports)"])
 
         if midi_ports:
             self.midi_combo.setCurrentIndex(0)
-        if serial_ports:
+        self._update_serial_port_options(usable_serial_ports(SerialLink.list_ports()))
+
+    def _update_serial_port_options(self, serial_ports: list[str]) -> None:
+        current_port = self.serial_combo.currentText()
+        options = serial_ports or ["(no serial ports)"]
+        current_options = [self.serial_combo.itemText(index) for index in range(self.serial_combo.count())]
+        if current_options == options:
+            self._serial_ports = serial_ports
+            return
+
+        self._serial_ports = serial_ports
+        self.serial_combo.clear()
+        self.serial_combo.addItems(options)
+        if current_port in serial_ports:
+            self.serial_combo.setCurrentIndex(serial_ports.index(current_port))
+        elif serial_ports:
             self.serial_combo.setCurrentIndex(preferred_serial_port_index(serial_ports))
+
+    def _refresh_serial_ports(self) -> None:
+        """Refresh USB port choices and reconnect when a board appears."""
+        serial_ports = usable_serial_ports(SerialLink.list_ports())
+        self._update_serial_port_options(serial_ports)
+
+        if self.serial_link is not None:
+            connected_port = self.serial_link.port
+            if connected_port not in serial_ports or not self.serial_link.is_open():
+                try:
+                    self.serial_link.close()
+                except Exception as exc:
+                    self._schedule_log(f"Serial link close failed: {exc}")
+                self.serial_link = None
+                self._beam_monitor_started_at = None
+                self._command_retry_timer.stop()
+                self._refresh_beam_indicator()
+
+        if self.running and self.serial_link is None and serial_ports:
+            selected_port = self.serial_combo.currentText()
+            if selected_port not in serial_ports:
+                selected_port = serial_ports[preferred_serial_port_index(serial_ports)]
+            self._open_serial_link(selected_port)
+
+    def _open_serial_link(self, serial_port: str) -> bool:
+        link = SerialLink(serial_port, config.BAUD_RATE)
+        link.on_packet = self._on_status_packet
+        link.on_receive = self._queue_serial_response
+        try:
+            link.open()
+        except Exception as exc:
+            self.serial_link = None
+            self._beam_monitor_started_at = None
+            error = f"Unable to open serial port {serial_port}: {exc}"
+            if self._last_serial_connect_error != error:
+                self._schedule_log(f"Serial link unavailable: {error}")
+                self._last_serial_connect_error = error
+            return False
+
+        self.serial_link = link
+        self._beam_monitor_started_at = time.monotonic()
+        self._last_serial_connect_error = None
+        self._schedule_log(f"Serial link ready on {serial_port}.")
+        self._refresh_beam_indicator()
+        if self.running:
+            self._command_retry_timer.start()
+        return True
 
     def _refresh_node_view(self) -> None:
         self.node_tree.clear()
@@ -508,19 +571,12 @@ class BridgeWindow(QtWidgets.QWidget):
         if serial_port in {"", "(no serial ports)"}:
             serial_port = None
 
-        self.serial_link = SerialLink(serial_port, config.BAUD_RATE)
-        self.serial_link.on_packet = self._on_status_packet
-        self.serial_link.on_receive = self._queue_serial_response
-        try:
-            self.serial_link.open()
-            self._beam_monitor_started_at = time.monotonic()
-            self._log("Serial link ready.")
-            self._refresh_beam_indicator()
-            self._command_retry_timer.start()
-        except Exception as exc:
-            self._log(f"Serial link unavailable: {exc}")
-            self.serial_link = None
-            self._beam_monitor_started_at = None
+        if serial_port not in self._serial_ports:
+            serial_port = None
+        if serial_port is None:
+            self._log("No serial ports detected. SPACE will connect when a USB serial device appears.")
+        else:
+            self._open_serial_link(serial_port)
 
         # Route MIDI callbacks through the Qt signal to ensure thread-safety.
         # The MIDI callback may run on a background thread; emitting the
