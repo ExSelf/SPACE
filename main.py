@@ -305,7 +305,8 @@ class BridgeWindow(QtWidgets.QWidget):
         self.node_tree.header().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         layout.addWidget(self.node_tree, 5, 0, 1, 2)
 
-        self.channel_panel = QtWidgets.QGroupBox("Saved channel assignments (not used for routing)")
+        self.channel_panel = QtWidgets.QGroupBox("MIDI channels for selected node")
+        self.channel_panel.setEnabled(False)
         channel_layout = QtWidgets.QGridLayout()
         self.channel_vars: list[QtWidgets.QCheckBox] = []
         for index in range(16):
@@ -394,25 +395,35 @@ class BridgeWindow(QtWidgets.QWidget):
         return True
 
     def _refresh_node_view(self) -> None:
-        self.node_tree.clear()
-        for node in self.node_registry.recent_nodes(max_age_seconds=60):
-            item = QtWidgets.QTreeWidgetItem(
-                [
-                    str(node.number),
-                    node.name,
-                    node.address,
-                    str(node.command),
-                    str(node.actual_command),
-                    str(node.parameter),
-                    str(node.actual_parameter),
-                    str(node.voltage),
-                    str(node.charge),
-                ]
-            )
-            self.node_tree.addTopLevelItem(item)
+        selected_node = self._get_selected_node()
+        selected_node_number = selected_node.number if selected_node is not None else None
+        signals_were_blocked = self.node_tree.blockSignals(True)
+        try:
+            self.node_tree.clear()
+            for node in self.node_registry.recent_nodes(max_age_seconds=60):
+                item = QtWidgets.QTreeWidgetItem(
+                    [
+                        str(node.number),
+                        node.name,
+                        node.address,
+                        str(node.command),
+                        str(node.actual_command),
+                        str(node.parameter),
+                        str(node.actual_parameter),
+                        str(node.voltage),
+                        str(node.charge),
+                    ]
+                )
+                self.node_tree.addTopLevelItem(item)
+                if node.number == selected_node_number:
+                    item.setSelected(True)
+        finally:
+            self.node_tree.blockSignals(signals_were_blocked)
+        self._on_node_selected()
 
     def _on_node_selected(self) -> None:
         selected_node = self._get_selected_node()
+        self.channel_panel.setEnabled(selected_node is not None)
         if selected_node is None:
             return
         for index, checkbox in enumerate(self.channel_vars):
@@ -426,7 +437,6 @@ class BridgeWindow(QtWidgets.QWidget):
             return
         selected_node.listen_channels = [checkbox.isChecked() for checkbox in self.channel_vars]
         self.node_registry.save_to_file(self.settings_path)
-        self._refresh_node_view()
 
     def _get_selected_node(self) -> NodeState | None:
         items = self.node_tree.selectedItems()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import Mock, patch
 
 import mido
@@ -156,6 +157,31 @@ def test_midi_packets_do_not_fall_back_to_channel_node_when_none_are_online() ->
     )
 
     assert packets == []
+
+
+def test_saving_node_channels_keeps_the_selected_node_and_persists_assignments(tmp_path) -> None:
+    node = NodeState(number=7, name="Node 7", address="0x07")
+    registry = NodeRegistry(initialize_default_nodes=False)
+    registry.add_node(node)
+    selected_item = Mock()
+    selected_item.text.return_value = "7"
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app.node_tree = Mock()
+    app.node_tree.selectedItems.return_value = [selected_item]
+    app.node_registry = registry
+    app.settings_path = tmp_path / "node_settings.json"
+    app.channel_vars = [Mock() for _ in range(16)]
+    for index, checkbox in enumerate(app.channel_vars):
+        checkbox.isChecked.return_value = index in {2, 8}
+    app._refresh_node_view = Mock()
+
+    app._save_selected_node_channels()
+
+    assert node.listen_channels == [index in {2, 8} for index in range(16)]
+    assert app.node_tree.selectedItems() == [selected_item]
+    app._refresh_node_view.assert_not_called()
+    saved_settings = json.loads(app.settings_path.read_text(encoding="utf-8"))
+    assert saved_settings["nodes"][0]["listen_channels"] == node.listen_channels
 
 
 def test_process_midi_logs_serial_send_failure() -> None:
