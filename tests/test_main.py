@@ -159,29 +159,24 @@ def test_midi_packets_do_not_fall_back_to_channel_node_when_none_are_online() ->
     assert packets == []
 
 
-def test_saving_node_channels_keeps_the_selected_node_and_persists_assignments(tmp_path) -> None:
-    node = NodeState(number=7, name="Node 7", address="0x07")
+def test_saving_node_channel_updates_only_its_node_and_persists_assignments(tmp_path) -> None:
+    first_node = NodeState(number=7, name="Node 7", address="0x07")
+    second_node = NodeState(number=8, name="Node 8", address="0x08")
     registry = NodeRegistry(initialize_default_nodes=False)
-    registry.add_node(node)
-    selected_item = Mock()
-    selected_item.text.return_value = "7"
+    registry.add_node(first_node)
+    registry.add_node(second_node)
     app = main.BridgeApp.__new__(main.BridgeApp)
-    app.node_tree = Mock()
-    app.node_tree.selectedItems.return_value = [selected_item]
     app.node_registry = registry
     app.settings_path = tmp_path / "node_settings.json"
-    app.channel_vars = [Mock() for _ in range(16)]
-    for index, checkbox in enumerate(app.channel_vars):
-        checkbox.isChecked.return_value = index in {2, 8}
-    app._refresh_node_view = Mock()
 
-    app._save_selected_node_channels()
+    app._save_node_channel(7, 2, True)
+    app._save_node_channel(8, 8, True)
 
-    assert node.listen_channels == [index in {2, 8} for index in range(16)]
-    assert app.node_tree.selectedItems() == [selected_item]
-    app._refresh_node_view.assert_not_called()
+    assert first_node.listen_channels == [index == 2 for index in range(16)]
+    assert second_node.listen_channels == [index == 8 for index in range(16)]
     saved_settings = json.loads(app.settings_path.read_text(encoding="utf-8"))
-    assert saved_settings["nodes"][0]["listen_channels"] == node.listen_channels
+    assert saved_settings["nodes"][0]["listen_channels"] == first_node.listen_channels
+    assert saved_settings["nodes"][1]["listen_channels"] == second_node.listen_channels
 
 
 def test_process_midi_logs_serial_send_failure() -> None:

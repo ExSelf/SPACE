@@ -287,7 +287,7 @@ class BridgeWindow(QtWidgets.QWidget):
         layout.addWidget(self.log_text, 4, 0, 1, 2)
 
         self.node_tree = QtWidgets.QTreeWidget()
-        self.node_tree.setColumnCount(9)
+        self.node_tree.setColumnCount(25)
         self.node_tree.setHeaderLabels([
             "Node",
             "Name",
@@ -298,28 +298,17 @@ class BridgeWindow(QtWidgets.QWidget):
             "Actual Param",
             "Voltage",
             "Charge",
+            *(f"Ch {index + 1}" for index in range(16)),
         ])
         self.node_tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.node_tree.setAlternatingRowColors(True)
-        self.node_tree.itemSelectionChanged.connect(self._on_node_selected)
-        self.node_tree.header().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
+        header = self.node_tree.header()
+        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
         layout.addWidget(self.node_tree, 5, 0, 1, 2)
 
-        self.channel_panel = QtWidgets.QGroupBox("MIDI channels for selected node")
-        self.channel_panel.setEnabled(False)
-        channel_layout = QtWidgets.QGridLayout()
-        self.channel_vars: list[QtWidgets.QCheckBox] = []
-        for index in range(16):
-            checkbox = QtWidgets.QCheckBox(f"Ch {index + 1}")
-            checkbox.toggled.connect(self._save_selected_node_channels)
-            self.channel_vars.append(checkbox)
-            channel_layout.addWidget(checkbox, index // 8, index % 8)
-        self.channel_panel.setLayout(channel_layout)
-        layout.addWidget(self.channel_panel, 6, 0, 1, 2)
-
         layout.setRowStretch(4, 1)
-        layout.setRowStretch(5, 2)
-        layout.setRowStretch(6, 1)
+        layout.setRowStretch(5, 3)
         layout.setColumnStretch(1, 1)
 
     def _populate_ports(self) -> None:
@@ -412,30 +401,31 @@ class BridgeWindow(QtWidgets.QWidget):
                         str(node.actual_parameter),
                         str(node.voltage),
                         str(node.charge),
+                        *("" for _ in range(16)),
                     ]
                 )
                 self.node_tree.addTopLevelItem(item)
+                for index, is_checked in enumerate(node.listen_channels):
+                    checkbox = QtWidgets.QCheckBox()
+                    checkbox.setChecked(is_checked)
+                    checkbox.setAccessibleName(f"Node {node.number}, MIDI channel {index + 1}")
+                    checkbox.setToolTip(f"Enable MIDI channel {index + 1} for node {node.number}")
+                    checkbox.toggled.connect(
+                        lambda checked, node_number=node.number, channel=index: self._save_node_channel(
+                            node_number, channel, checked
+                        )
+                    )
+                    self.node_tree.setItemWidget(item, 9 + index, checkbox)
                 if node.number == selected_node_number:
                     item.setSelected(True)
         finally:
             self.node_tree.blockSignals(signals_were_blocked)
-        self._on_node_selected()
 
-    def _on_node_selected(self) -> None:
-        selected_node = self._get_selected_node()
-        self.channel_panel.setEnabled(selected_node is not None)
-        if selected_node is None:
+    def _save_node_channel(self, node_number: int, channel: int, checked: bool) -> None:
+        node = self.node_registry.get_node(node_number)
+        if node is None:
             return
-        for index, checkbox in enumerate(self.channel_vars):
-            checkbox.blockSignals(True)
-            checkbox.setChecked(selected_node.listen_channels[index])
-            checkbox.blockSignals(False)
-
-    def _save_selected_node_channels(self) -> None:
-        selected_node = self._get_selected_node()
-        if selected_node is None:
-            return
-        selected_node.listen_channels = [checkbox.isChecked() for checkbox in self.channel_vars]
+        node.listen_channels[channel] = checked
         self.node_registry.save_to_file(self.settings_path)
 
     def _get_selected_node(self) -> NodeState | None:
