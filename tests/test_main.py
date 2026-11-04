@@ -127,6 +127,57 @@ def test_control_change_shows_its_value_as_the_command() -> None:
     assert packet.constant_commands[0] == 127
 
 
+def test_note_numbers_update_command_or_individual_constant_registers() -> None:
+    registry = NodeRegistry(initialize_default_nodes=False)
+    node = NodeState(
+        number=1,
+        name="Node 1",
+        address="0x01",
+        listen_channels=[True] + [False] * 15,
+    )
+    registry.add_node(node)
+    registry.update_node_status(node_number=1)
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app.ttl_slider = Mock()
+    app.ttl_slider.value.return_value = 3
+    app.node_registry = registry
+    app.serial_link = Mock()
+    app.serial_link.is_open.return_value = True
+    app._refresh_node_view = Mock()
+    app._schedule_log = Mock()
+    app._pending_commands = {}
+    app._command_send_errors = {}
+
+    messages = [
+        mido.Message("note_on", channel=0, note=13, velocity=6),
+        mido.Message("note_on", channel=0, note=5, velocity=100),
+        mido.Message("note_on", channel=0, note=0, velocity=3),
+        mido.Message("note_on", channel=0, note=12, velocity=7),
+    ]
+    for message in messages:
+        app._process_midi(message)
+
+    packets = [call.args[0] for call in app.serial_link.send.call_args_list]
+    assert [(packet.command, packet.parameter) for packet in packets] == [
+        (13, 6),
+        (0, 0),
+        (0, 0),
+        (12, 7),
+    ]
+    assert [packet.flags for packet in packets] == [
+        main.COMMAND_UPDATE_STATE,
+        main.COMMAND_UPDATE_CONSTANTS,
+        main.COMMAND_UPDATE_CONSTANTS,
+        main.COMMAND_UPDATE_STATE,
+    ]
+    assert [packet.constant_update_mask for packet in packets] == [0, 1 << 5, 1, 0]
+    assert packets[1].constant_commands[5] == 100
+    assert packets[2].constant_commands[0] == 3
+    assert node.command == 12
+    assert node.parameter == 7
+    assert node.constant_commands == [3, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0]
+
+
 def test_midi_packets_target_nodes_configured_for_the_channel() -> None:
     registry = NodeRegistry(initialize_default_nodes=False)
     offline_assigned = NodeState(

@@ -1,9 +1,10 @@
-"""Binary packet serialization for BEAM protocol v2.0."""
+"""Binary packet serialization for the BEAM/SUN protocol."""
 
 from __future__ import annotations
 
 import struct
 import time
+import zlib
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -15,20 +16,74 @@ TYPE_HEARTBEAT = 0x04
 
 # Total packet size (ESP-NOW maximum)
 PACKET_SIZE = 250
+TARGET_BITMAP_SIZE = 32
+TARGET_BITMAP_OFFSET = 28
+COMMAND_FLAGS_OFFSET = 25
+CONSTANT_UPDATE_MASK_OFFSET = 26
+TIMESTAMP_ECHO_OFFSET = 242
+CRC_OFFSET = 246
+COMMAND_UPDATE_STATE = 0x01
+COMMAND_UPDATE_CONSTANTS = 0x02
+
+
+def _finalize_packet(packet: bytearray, command_timestamp_ms: int) -> bytes:
+    struct.pack_into("<I", packet, TIMESTAMP_ECHO_OFFSET, command_timestamp_ms & 0xFFFFFFFF)
+    struct.pack_into("<I", packet, CRC_OFFSET, zlib.crc32(packet[:CRC_OFFSET]))
+    return bytes(packet)
+
+
+def _valid_packet(data: bytes, packet_type: int) -> bool:
+    return (
+        len(data) == PACKET_SIZE
+        and data[0] == packet_type
+        and struct.unpack_from("<I", data, TIMESTAMP_ECHO_OFFSET)[0]
+        == struct.unpack_from("<I", data, 7)[0]
+        and struct.unpack_from("<I", data, CRC_OFFSET)[0] == zlib.crc32(data[:CRC_OFFSET])
+    )
+
+
+def target_bitmap_for_nodes(node_ids: list[int]) -> bytes:
+    """Pack node IDs 0-255 into a 256-bit little-endian bitmap."""
+    bitmap = bytearray(TARGET_BITMAP_SIZE)
+    for node_id in node_ids:
+        if not 0 <= node_id <= 255:
+            raise ValueError(f"Node ID must be between 0 and 255, got {node_id}")
+        bitmap[node_id // 8] |= 1 << (node_id % 8)
+    return bytes(bitmap)
+
+
+def nodes_in_target_bitmap(bitmap: bytes) -> list[int]:
+    """Return all node IDs selected by a 32-byte target bitmap."""
+    if len(bitmap) != TARGET_BITMAP_SIZE:
+        raise ValueError(f"Target bitmap must be {TARGET_BITMAP_SIZE} bytes")
+    return [
+        node_id
+        for node_id in range(256)
+        if bitmap[node_id // 8] & (1 << (node_id % 8))
+    ]
 
 
 @dataclass
 class CommandPacket:
-    """Command packet sent to SUN nodes (250 bytes, binary format)."""
+    """Command broadcast with a packed bitmap identifying its target nodes."""
 
-    node_id: int
+    node_id: int = 0
     ttl: int = 3
     command: int = 0
     parameter: int = 0
     constant_commands: bytes = field(default_factory=lambda: bytes(12))
+    target_bitmap: bytes = field(default_factory=lambda: bytes(TARGET_BITMAP_SIZE))
     global_timestamp_ms: Optional[int] = None
     cmd_timestamp_ms: int = 0
     flags: int = 0
+    constant_update_mask: int = 0
+
+    @property
+    def target_nodes(self) -> list[int]:
+        return nodes_in_target_bitmap(self.target_bitmap)
+
+    def targets_node(self, node_id: int) -> bool:
+        return bool(self.target_bitmap[node_id // 8] & (1 << (node_id % 8)))
 
     def to_bytes(self) -> bytes:
         """
@@ -36,20 +91,25 @@ class CommandPacket:
         
         Format:
         [0]     packet_type (0x01)
-        [1]     node_id (1-255)
+        [1]     source node (0 for SPACE)
         [2]     ttl (1-12)
         [3-6]   global_timestamp_ms (uint32_le)
         [7-10]  cmd_timestamp_ms (uint32_le)
         [11]    command (0-255)
         [12]    parameter (0-255)
         [13-24] constant_commands[12]
-        [25]    flags
-        [26-199] future_payload (174 bytes)
-        [200-249] reserved (50 bytes)
+        [25]    command update flags
+        [26-27] constant command update mask (uint16_le)
+        [28-59] target bitmap (256 bits, bit N selects node N)
+        [60-241] reserved
+        [242-245] repeated command timestamp
+        [246-249] CRC-32/ISO-HDLC over bytes 0-245
         """
         packet = bytearray(PACKET_SIZE)
         
-        # Header
+        if len(self.target_bitmap) != TARGET_BITMAP_SIZE:
+            raise ValueError(f"Target bitmap must be {TARGET_BITMAP_SIZE} bytes")
+
         packet[0] = TYPE_COMMAND
         packet[1] = self.node_id & 0xFF
         packet[2] = self.ttl & 0xFF
@@ -71,15 +131,15 @@ class CommandPacket:
                 cmds[i] = byte & 0xFF
         packet[13:25] = bytes(cmds)
         
-        packet[25] = self.flags & 0xFF
-        
-        # Rest is zeros (already initialized)
-        return bytes(packet)
+        packet[COMMAND_FLAGS_OFFSET] = self.flags & 0xFF
+        struct.pack_into("<H", packet, CONSTANT_UPDATE_MASK_OFFSET, self.constant_update_mask & 0xFFFF)
+        packet[TARGET_BITMAP_OFFSET:TARGET_BITMAP_OFFSET + TARGET_BITMAP_SIZE] = self.target_bitmap
+        return _finalize_packet(packet, self.cmd_timestamp_ms)
 
     @staticmethod
     def from_bytes(data: bytes) -> CommandPacket | None:
-        """Parse a 250-byte binary command packet."""
-        if len(data) < 25 or data[0] != TYPE_COMMAND:
+        """Parse a complete, integrity-checked command packet."""
+        if not _valid_packet(data, TYPE_COMMAND):
             return None
         
         try:
@@ -94,7 +154,9 @@ class CommandPacket:
                 command=data[11],
                 parameter=data[12],
                 constant_commands=bytes(data[13:25]),
-                flags=data[25]
+                flags=data[COMMAND_FLAGS_OFFSET],
+                constant_update_mask=struct.unpack_from("<H", data, CONSTANT_UPDATE_MASK_OFFSET)[0],
+                target_bitmap=bytes(data[TARGET_BITMAP_OFFSET:TARGET_BITMAP_OFFSET + TARGET_BITMAP_SIZE]),
             )
         except (struct.error, IndexError):
             return None
@@ -122,7 +184,6 @@ class StatusPacket:
     charge_percent: int = 0
     global_timestamp_ms: Optional[int] = None
     cmd_timestamp_ms: int = 0
-    subnodes: List[Subnode] = field(default_factory=list)
 
     def to_bytes(self) -> bytes:
         """
@@ -139,8 +200,10 @@ class StatusPacket:
         [13-24] constant_commands[12]
         [25-26] voltage_mv (uint16_le, millivolts)
         [27]    charge_percent (0-100%)
-        [28-91] subnodes array (8 slots × 8 bytes)
-        [92-249] reserved (158 bytes)
+        [28-59] unused target bitmap
+        [60-241] reserved
+        [242-245] repeated command timestamp
+        [246-249] CRC-32/ISO-HDLC over bytes 0-245
         """
         packet = bytearray(PACKET_SIZE)
         
@@ -170,40 +233,18 @@ class StatusPacket:
         struct.pack_into('<H', packet, 25, self.voltage_mv & 0xFFFF)
         packet[27] = self.charge_percent & 0xFF
         
-        # Subnodes (up to 8, 8 bytes each)
-        for i, subnode in enumerate(self.subnodes[:8]):
-            offset = 28 + (i * 8)
-            packet[offset] = subnode.node_id & 0xFF
-            struct.pack_into('<H', packet, offset + 1, subnode.voltage_mv & 0xFFFF)
-            packet[offset + 3] = subnode.charge_percent & 0xFF
-            # bytes [offset+4:offset+8] are reserved (already zeros)
-        
-        return bytes(packet)
+        return _finalize_packet(packet, self.cmd_timestamp_ms)
 
     @staticmethod
     def from_bytes(data: bytes) -> StatusPacket | None:
-        """Parse a 250-byte binary status packet."""
-        if len(data) < 28 or data[0] != TYPE_STATUS:
+        """Parse a complete, integrity-checked status packet."""
+        if not _valid_packet(data, TYPE_STATUS):
             return None
         
         try:
             global_ts = struct.unpack_from('<I', data, 3)[0]
             cmd_ts = struct.unpack_from('<I', data, 7)[0]
             voltage = struct.unpack_from('<H', data, 25)[0]
-            
-            # Parse subnodes
-            subnodes = []
-            for i in range(8):
-                offset = 28 + (i * 8)
-                subnode_id = data[offset]
-                if subnode_id > 0:  # 0 = unused slot
-                    subnode_voltage = struct.unpack_from('<H', data, offset + 1)[0]
-                    subnode_charge = data[offset + 3]
-                    subnodes.append(Subnode(
-                        node_id=subnode_id,
-                        voltage_mv=subnode_voltage,
-                        charge_percent=subnode_charge
-                    ))
             
             return StatusPacket(
                 node_id=data[1],
@@ -215,7 +256,6 @@ class StatusPacket:
                 constant_commands=bytes(data[13:25]),
                 voltage_mv=voltage,
                 charge_percent=data[27],
-                subnodes=subnodes
             )
         except (struct.error, IndexError):
             return None

@@ -103,7 +103,7 @@ class SerialLink:
             return None
 
     def send(self, packet) -> None:
-        """Send a 250-byte binary packet as one BEAM USB line."""
+        """Send one fixed-size binary packet to BEAM over USB serial."""
         if self.on_packet is not None:
             self.on_packet(packet)
 
@@ -113,10 +113,7 @@ class SerialLink:
         payload = packet.to_bytes()
         if len(payload) != PACKET_SIZE:
             raise ValueError(f"Expected a {PACKET_SIZE}-byte packet, got {len(payload)}")
-        if b"\r" in payload or b"\n" in payload:
-            raise ValueError("BEAM USB line framing cannot carry carriage-return or newline bytes")
 
-        payload += b"\n"
         self._serial.write(payload)
         self._serial.flush()
         print(f"Sent {PACKET_SIZE}-byte binary packet to {self.port}")

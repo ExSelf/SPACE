@@ -1,0 +1,32 @@
+{
+  "window_width": 900,
+  "window_height": 700,
+  "node_table_column_widths": {
+    "Node": 30,
+    "Name": 200,
+    "Status": 55,
+    "Address": 130,
+    "Cmd": 40,
+    "Actual Cmd": 40,
+    "Param": 40,
+    "Actual Param": 40,
+    "Voltage": 40,
+    "Charge": 40,
+    "Ch 1": 30,
+    "Ch 2": 30,
+    "Ch 3": 30,
+    "Ch 4": 30,
+    "Ch 5": 30,
+    "Ch 6": 30,
+    "Ch 7": 30,
+    "Ch 8": 30,
+    "Ch 9": 30,
+    "Ch 10": 30,
+    "Ch 11": 30,
+    "Ch 12": 30,
+    "Ch 13": 30,
+    "Ch 14": 30,
+    "Ch 15": 30,
+    "Ch 16": 30
+  }
+}

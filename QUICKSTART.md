@@ -17,6 +17,10 @@ python -m pip install -r requirements.txt
 python main.py
 ```
 
+On macOS this development launch may show **Python** in the menu bar. To see
+**SPACE**, build and open the macOS app bundle using the instructions in
+[README.md](./README.md#build-standalone-app).
+
 ### 4. Configure
 1. Select your MIDI input port from "MIDI input" dropdown
 2. Select the serial port for BEAM controller (usually COM port on Windows)

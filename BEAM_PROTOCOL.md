@@ -105,25 +105,27 @@ The bridge translates MIDI messages into command packets:
 ```
 MIDI Note On (channel, note, velocity)
     ↓
-Packet:
-  node = each node with a status report received in the last 60 seconds
-  command = note (60-127)
-  parameter = velocity (0-127)
+If note is 12-127:
+  command = note
+  parameter = velocity
+
+If note is 0-11:
+  constant_commands[note] = velocity
+  preserve command, parameter, and all other constant registers
 ```
 
 ### Control Change Messages
 ```
 MIDI CC (channel, controller, value)
     ↓
-Packet:
   node = each node with a status report received in the last 60 seconds
   constant_commands[0] = CC value
-  (remaining 11 bytes = 0)
+  preserve command, parameter, and constant registers 1-11
 ```
 
-Control-change messages update the constant-command bytes, not the packet's
-`command` or `parameter` fields. In the tree, **Cmd** shows the CC value and
-**Param** is blank; note-on messages show the note and velocity.
+Notes 0-11 and control-change messages update only the selected constant
+register; they do not overwrite the command or parameter. Notes 12-127 update
+the command and parameter without overwriting constant registers.
 
 ## Node Configuration
 

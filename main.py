@@ -15,12 +15,22 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from space import config
 from space.midi_input import MidiInput, list_input_ports
 from space.node_registry import NodeRegistry, NodeState
-from space.packet import CommandPacket, StatusPacket, extract_espnow_payload
+from space.packet import (
+    COMMAND_UPDATE_CONSTANTS,
+    COMMAND_UPDATE_STATE,
+    CommandPacket,
+    StatusPacket,
+    extract_espnow_payload,
+    target_bitmap_for_nodes,
+)
 from space.serial_link import SerialLink
+from space.window_preferences import load_window_preferences
 
 
 NODE_STATUS_COLOR_THRESHOLD_SECONDS = 5
 NODE_OFFLINE_TIMEOUT_SECONDS = NODE_STATUS_COLOR_THRESHOLD_SECONDS * 30
+NODE_ACTIVE_TIMEOUT_SECONDS = 60
+COMMAND_RETRY_INTERVAL_SECONDS = 0.1
 
 
 def format_global_time(global_time_ms: int) -> str:
@@ -110,57 +120,69 @@ def preferred_serial_port_index(ports: list[str]) -> int:
 
 
 def midi_to_packet(message: mido.Message, ttl: int = 3, node_id: int | None = None) -> CommandPacket | None:
-    """Translate one MIDI message into a CommandPacket with TTL.
-
-    When a specific target node is provided, that node is used; otherwise the
-    legacy channel-to-node fallback keeps the original behavior for single-node
-    routing scenarios.
-    """
+    """Translate one MIDI message into a command packet for a single target."""
     target_node = node_id if node_id is not None else message.channel + 1
     if message.type == "note_on":
+        if 0 <= message.note < 12:
+            const_cmds = bytearray(12)
+            const_cmds[message.note] = message.velocity
+            return CommandPacket(
+                node_id=0,
+                ttl=ttl,
+                constant_commands=bytes(const_cmds),
+                flags=COMMAND_UPDATE_CONSTANTS,
+                constant_update_mask=1 << message.note,
+                target_bitmap=target_bitmap_for_nodes([target_node]),
+            )
         return CommandPacket(
-            node_id=target_node,
+            node_id=0,
             ttl=ttl,
             command=message.note,
             parameter=message.velocity,
+            flags=COMMAND_UPDATE_STATE,
+            target_bitmap=target_bitmap_for_nodes([target_node]),
         )
     if message.type == "control_change":
         const_cmds = bytearray(12)
         const_cmds[0] = message.value
         return CommandPacket(
-            node_id=target_node,
+            node_id=0,
             ttl=ttl,
             constant_commands=bytes(const_cmds),
+            flags=COMMAND_UPDATE_CONSTANTS,
+            constant_update_mask=1,
+            target_bitmap=target_bitmap_for_nodes([target_node]),
         )
     return None
 
 
 def midi_to_packets(message: mido.Message, ttl: int = 3, node_registry: NodeRegistry | None = None) -> list[CommandPacket]:
-    """Map a MIDI message to nodes configured to listen to its channel."""
-    if node_registry is not None:
-        packets = []
-        for node in node_registry.nodes_for_midi_channel(message.channel):
-            packet = midi_to_packet(message, ttl=ttl, node_id=node.number)
-            if packet is not None:
-                if message.type == "note_on":
-                    packet.constant_commands = bytes(node.constant_commands)
-                elif message.type == "control_change":
-                    constants = bytearray(node.constant_commands[:12])
-                    constants.extend(bytes(12 - len(constants)))
-                    constants[0] = message.value
-                    packet.constant_commands = bytes(constants)
-                    packet.command = node.command if node.command is not None else (node.actual_command or 0)
-                    packet.parameter = node.parameter if node.parameter is not None else (node.actual_parameter or 0)
-                packets.append(packet)
-        return packets
+    """Build one bitmap-addressed packet for online nodes assigned to the channel."""
+    if node_registry is None:
+        packet = midi_to_packet(message, ttl=ttl)
+        return [packet] if packet is not None else []
 
-    packet = midi_to_packet(message, ttl=ttl)
-    return [packet] if packet is not None else []
+    active_nodes = node_registry.recent_nodes(max_age_seconds=NODE_ACTIVE_TIMEOUT_SECONDS)
+    target_nodes = [
+        node.number for node in active_nodes
+        if 0 <= message.channel < len(node.listen_channels)
+        and node.listen_channels[message.channel]
+    ]
+    if not target_nodes:
+        return []
+
+    packet = midi_to_packet(message, ttl=ttl, node_id=target_nodes[0])
+    if packet is not None:
+        packet.target_bitmap = target_bitmap_for_nodes(target_nodes)
+        return [packet]
+    return []
 
 
 def midi_to_registry_update(message: mido.Message) -> tuple[int, int, int | None] | None:
     """Convert a MIDI message into the command and parameter shown for matching nodes."""
     if message.type == "note_on":
+        if message.note < 12:
+            return None
         return message.channel, message.note, message.velocity
     if message.type == "control_change":
         return message.channel, message.value, None
@@ -168,13 +190,8 @@ def midi_to_registry_update(message: mido.Message) -> tuple[int, int, int | None
 
 
 def command_packet_matches_node(packet: CommandPacket, node: NodeState) -> bool:
-    """Return whether SUN has reported the complete state and command timestamp."""
-    return (
-        node.actual_command == packet.command
-        and node.actual_parameter == packet.parameter
-        and bytes(node.actual_constant_commands) == packet.constant_commands
-        and node.actual_command_timestamp_ms == packet.cmd_timestamp_ms
-    )
+    """Return whether this target has acknowledged the command timestamp."""
+    return packet.targets_node(node.number) and node.actual_command_timestamp_ms == packet.cmd_timestamp_ms
 
 
 def node_status_color(age_seconds: float) -> tuple[int, int, int]:
@@ -202,7 +219,9 @@ class BridgeWindow(QtWidgets.QWidget):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("SPACE MIDI Bridge")
-        self.resize(900, 700)
+        self.window_preferences_path = Path(__file__).with_name("window_preferences.json")
+        self.window_preferences = load_window_preferences(self.window_preferences_path)
+        self.resize(self.window_preferences.width, self.window_preferences.height)
         self.setMinimumSize(760, 560)
 
         self.midi_input: Optional[MidiInput] = None
@@ -228,10 +247,12 @@ class BridgeWindow(QtWidgets.QWidget):
         self._node_status_timer.timeout.connect(self._refresh_node_status_indicators)
         self._node_status_widgets: dict[int, tuple[QtWidgets.QLabel, QtWidgets.QLabel]] = {}
         self._command_retry_timer = QtCore.QTimer(self)
-        self._command_retry_timer.setInterval(10)
+        self._command_retry_timer.setInterval(int(COMMAND_RETRY_INTERVAL_SECONDS * 1000))
         self._command_retry_timer.timeout.connect(self._retry_pending_commands)
         self._pending_commands: dict[int, CommandPacket] = {}
         self._command_send_errors: dict[int, str] = {}
+        self._last_command_send_at: float | None = None
+        self._last_command_timestamp_ms = 0
         self._serial_ports: list[str] = []
         self._last_serial_connect_error: str | None = None
         self._set_beam_indicator("stopped")
@@ -312,7 +333,7 @@ class BridgeWindow(QtWidgets.QWidget):
 
         self.node_tree = QtWidgets.QTreeWidget()
         self.node_tree.setColumnCount(26)
-        self.node_tree.setHeaderLabels([
+        column_labels = [
             "Node",
             "Name",
             "Status",
@@ -324,12 +345,14 @@ class BridgeWindow(QtWidgets.QWidget):
             "Voltage",
             "Charge",
             *(f"Ch {index + 1}" for index in range(16)),
-        ])
+        ]
+        self.node_tree.setHeaderLabels(column_labels)
         self.node_tree.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.node_tree.setAlternatingRowColors(True)
         header = self.node_tree.header()
-        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.Interactive)
+        for index, label in enumerate(column_labels):
+            header.resizeSection(index, self.window_preferences.column_widths[label])
         layout.addWidget(self.node_tree, 5, 0, 1, 2)
 
         layout.setRowStretch(4, 1)
@@ -548,7 +571,12 @@ class BridgeWindow(QtWidgets.QWidget):
     def _process_midi(self, message: mido.Message) -> None:
         ttl = self.ttl_slider.value()
         update = midi_to_registry_update(message)
-        if update is not None:
+        if message.type == "note_on" and message.note < 12:
+            self._schedule_log(
+                f"MIDI note_on -> channel {midi_channel_number(message.channel)} "
+                f"constant {message.note} value {message.velocity}"
+            )
+        elif update is not None:
             channel, command, parameter = update
             self._schedule_log(
                 f"MIDI {message.type} -> channel {midi_channel_number(channel)} "
@@ -556,25 +584,36 @@ class BridgeWindow(QtWidgets.QWidget):
             )
 
         packets = midi_to_packets(message, ttl, self.node_registry)
-        if update is not None and not packets:
+        if message.type in {"note_on", "control_change"} and not packets:
             self._schedule_log(
-                f"MIDI packet not sent: no nodes are configured for channel {midi_channel_number(message.channel)}."
+                f"MIDI packet not sent: no online nodes are configured for channel {midi_channel_number(message.channel)}."
             )
             return
         if packets and self.serial_link is None:
             self._schedule_log("MIDI packet not sent: serial link is unavailable.")
             return
         command_timestamp_ms = int(time.monotonic() * 1000) & 0xFFFFFFFF
-        for packet in packets:
-            packet.cmd_timestamp_ms = command_timestamp_ms
-            self._pending_commands[packet.node_id] = packet
-            self._command_send_errors.pop(packet.node_id, None)
+        last_timestamp = getattr(self, "_last_command_timestamp_ms", 0)
+        if command_timestamp_ms == last_timestamp:
+            command_timestamp_ms = (command_timestamp_ms + 1) & 0xFFFFFFFF
+        self._last_command_timestamp_ms = command_timestamp_ms
+
+        packet = packets[0]
+        packet.cmd_timestamp_ms = command_timestamp_ms
+        self._pending_commands.clear()
+        self._command_send_errors.clear()
+        self._last_command_send_at = None
+        update_state = bool(packet.flags & COMMAND_UPDATE_STATE)
+        for node_number in packet.target_nodes:
+            self._pending_commands[node_number] = packet
             self.node_registry.update_desired_command(
-                node_number=packet.node_id,
+                node_number=node_number,
                 command=packet.command,
                 parameter=packet.parameter,
                 constant_commands=packet.constant_commands,
                 command_timestamp_ms=packet.cmd_timestamp_ms,
+                update_state=update_state,
+                constant_update_mask=packet.constant_update_mask,
             )
         if packets:
             self._refresh_node_view()
@@ -592,18 +631,31 @@ class BridgeWindow(QtWidgets.QWidget):
                 continue
             if command_packet_matches_node(packet, node):
                 self._pending_commands.pop(node_number, None)
-                self._command_send_errors.pop(node_number, None)
                 continue
 
-            try:
-                self.serial_link.send(packet)
-            except Exception as exc:
-                error = str(exc)
-                if self._command_send_errors.get(node_number) != error:
-                    self._schedule_log(f"MIDI packet not sent to node {node_number}: {error}")
-                    self._command_send_errors[node_number] = error
-            else:
-                self._command_send_errors.pop(node_number, None)
+        if not self._pending_commands:
+            self._command_send_errors.clear()
+            return
+
+        packet = next(iter(self._pending_commands.values()))
+        now = time.monotonic()
+        last_send_at = getattr(self, "_last_command_send_at", None)
+        if last_send_at is not None and now - last_send_at < COMMAND_RETRY_INTERVAL_SECONDS:
+            return
+
+        try:
+            self.serial_link.send(packet)
+        except Exception as exc:
+            error = str(exc)
+            error_key = packet.cmd_timestamp_ms
+            if self._command_send_errors.get(error_key) != error:
+                self._schedule_log(
+                    f"MIDI packet not sent to nodes {packet.target_nodes}: {error}"
+                )
+                self._command_send_errors[error_key] = error
+        else:
+            self._command_send_errors.clear()
+            self._last_command_send_at = now
 
     def _get_elapsed_ms(self) -> int:
         """Get elapsed time in milliseconds since bridge start."""
@@ -753,6 +805,8 @@ BridgeApp = BridgeWindow
 
 def main() -> None:
     app = QtWidgets.QApplication([])
+    app.setApplicationName("SPACE")
+    app.setApplicationDisplayName("SPACE")
     if sys.platform == "darwin":
         app.setStyle("macintosh")
     else:

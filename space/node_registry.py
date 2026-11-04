@@ -221,14 +221,22 @@ class NodeRegistry:
         return True
 
     def update_desired_command(self, node_number: int, command: int, parameter: int,
-                               constant_commands: bytes, command_timestamp_ms: int) -> bool:
+                               constant_commands: bytes, command_timestamp_ms: int,
+                               update_state: bool = True,
+                               constant_update_mask: int = 0x0FFF) -> bool:
         """Store the full command state SPACE is retrying until SUN confirms it."""
         node = self.get_node(node_number)
         if node is None:
             return False
-        node.command = command
-        node.parameter = parameter
-        node.constant_commands = list(constant_commands[:12].ljust(12, b"\x00"))
+        if update_state:
+            node.command = command
+            node.parameter = parameter
+        constants = list(node.constant_commands[:12])
+        constants.extend([0] * (12 - len(constants)))
+        for index in range(12):
+            if constant_update_mask & (1 << index):
+                constants[index] = constant_commands[index] if index < len(constant_commands) else 0
+        node.constant_commands = constants
         node.command_timestamp = time()
         node.command_timestamp_ms = command_timestamp_ms & 0xFFFFFFFF
         return True

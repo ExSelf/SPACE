@@ -72,6 +72,10 @@ pip install -r requirements.txt
 python main.py
 ```
 
+On macOS, this development command runs under the Python executable, so the
+menu bar may show **Python**. To show **SPACE**, build and launch the macOS app
+bundle described below.
+
 ## Configuration
 
 ### Node Settings (`node_settings.json`)
@@ -91,6 +95,13 @@ Configure node names and save per-node MIDI channel assignments:
 ```
 
 The app auto-creates this file with 255 nodes on first run.
+
+### Window Preferences (`window_preferences.json`)
+
+Adjust the starting window size and node-table column widths in
+`window_preferences.json` next to `main.py`. Widths are in pixels; table
+columns are named by their visible headers. Changes take effect the next time
+the app starts. Column widths remain resizable while the app is running.
 
 ## Documentation
 
@@ -129,13 +140,20 @@ pylint space/ main.py
 
 ## Build Standalone App
 
-On macOS and Windows, create a single executable:
+On macOS, build and open the named app bundle:
+
+```bash
+python3 -m PyInstaller --name SPACE --windowed --add-data "window_preferences.json:." main.py
+open dist/SPACE.app
+```
+
+On Windows, create a single executable:
 
 ```bash
 pyinstaller --name SPACE --onefile --windowed main.py
 ```
 
-The executable will be in the `dist/` folder.
+The macOS app bundle or Windows executable will be in the `dist/` folder.
 
 ## References
 
