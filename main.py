@@ -592,6 +592,8 @@ class BridgeWindow(QtWidgets.QWidget):
         if packets and self.serial_link is None:
             self._schedule_log("MIDI packet not sent: serial link is unavailable.")
             return
+        if not packets:
+            return
         command_timestamp_ms = int(time.monotonic() * 1000) & 0xFFFFFFFF
         last_timestamp = getattr(self, "_last_command_timestamp_ms", 0)
         if command_timestamp_ms == last_timestamp:

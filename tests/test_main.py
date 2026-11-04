@@ -178,6 +178,23 @@ def test_note_numbers_update_command_or_individual_constant_registers() -> None:
     assert node.constant_commands == [3, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0]
 
 
+def test_process_midi_ignores_note_off_without_indexing_empty_packets() -> None:
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app.ttl_slider = Mock()
+    app.ttl_slider.value.return_value = 3
+    app.node_registry = Mock()
+    app.node_registry.recent_nodes.return_value = []
+    app.serial_link = Mock()
+    app._schedule_log = Mock()
+    app._pending_commands = {}
+    app._command_send_errors = {}
+
+    app._process_midi(mido.Message("note_off", channel=0, note=60, velocity=0))
+
+    app.serial_link.send.assert_not_called()
+    assert app._pending_commands == {}
+
+
 def test_midi_packets_target_nodes_configured_for_the_channel() -> None:
     registry = NodeRegistry(initialize_default_nodes=False)
     offline_assigned = NodeState(
