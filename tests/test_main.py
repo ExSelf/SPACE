@@ -179,6 +179,21 @@ def test_saving_node_channel_updates_only_its_node_and_persists_assignments(tmp_
     assert saved_settings["nodes"][1]["listen_channels"] == second_node.listen_channels
 
 
+@pytest.mark.parametrize(
+    ("age_seconds", "expected_color"),
+    [
+        (0, (0, 255, 0)),
+        (1.25, (127, 255, 0)),
+        (2.5, (255, 255, 0)),
+        (3.75, (255, 127, 0)),
+        (5, (255, 0, 0)),
+        (30, (255, 0, 0)),
+    ],
+)
+def test_node_status_color_fades_from_green_to_red(age_seconds, expected_color) -> None:
+    assert main.node_status_color(age_seconds) == expected_color
+
+
 def test_process_midi_logs_serial_send_failure() -> None:
     app = main.BridgeApp.__new__(main.BridgeApp)
     app.ttl_slider = Mock()

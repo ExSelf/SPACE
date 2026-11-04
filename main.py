@@ -19,6 +19,10 @@ from space.packet import CommandPacket, StatusPacket, extract_espnow_payload
 from space.serial_link import SerialLink
 
 
+NODE_STATUS_COLOR_THRESHOLD_SECONDS = 5
+NODE_OFFLINE_TIMEOUT_SECONDS = NODE_STATUS_COLOR_THRESHOLD_SECONDS * 30
+
+
 def format_global_time(global_time_ms: int) -> str:
     """Format a millisecond global-time counter as HH:mm:ss."""
     seconds = (int(global_time_ms) // 1000) % (24 * 60 * 60)
@@ -173,6 +177,21 @@ def command_packet_matches_node(packet: CommandPacket, node: NodeState) -> bool:
     )
 
 
+def node_status_color(age_seconds: float) -> tuple[int, int, int]:
+    """Match the legacy UI's green-to-red fade over its offline period."""
+    age_ms = max(0, int(age_seconds * 1000))
+    threshold_ms = NODE_STATUS_COLOR_THRESHOLD_SECONDS * 1000
+    if age_ms < threshold_ms // 2:
+        red = int(age_ms * 510 / threshold_ms)
+        green = 255
+    elif age_ms < threshold_ms:
+        red = 255
+        green = int(255 - (age_ms - threshold_ms / 2) * 510 / threshold_ms)
+    else:
+        red, green = 255, 0
+    return red, green, 0
+
+
 class BridgeWindow(QtWidgets.QWidget):
     """A desktop app that listens for MIDI and forwards it to an ESP32 over USB serial."""
 
@@ -204,6 +223,10 @@ class BridgeWindow(QtWidgets.QWidget):
         self._beam_status_timer = QtCore.QTimer(self)
         self._beam_status_timer.setInterval(100)
         self._beam_status_timer.timeout.connect(self._refresh_beam_indicator)
+        self._node_status_timer = QtCore.QTimer(self)
+        self._node_status_timer.setInterval(100)
+        self._node_status_timer.timeout.connect(self._refresh_node_status_indicators)
+        self._node_status_widgets: dict[int, tuple[QtWidgets.QLabel, QtWidgets.QLabel]] = {}
         self._command_retry_timer = QtCore.QTimer(self)
         self._command_retry_timer.setInterval(10)
         self._command_retry_timer.timeout.connect(self._retry_pending_commands)
@@ -218,6 +241,7 @@ class BridgeWindow(QtWidgets.QWidget):
         self._serial_scan_timer.timeout.connect(self._refresh_serial_ports)
         self._serial_scan_timer.start()
         self._refresh_node_view()
+        self._node_status_timer.start()
 
     def _build_ui(self) -> None:
         layout = QtWidgets.QGridLayout(self)
@@ -287,10 +311,11 @@ class BridgeWindow(QtWidgets.QWidget):
         layout.addWidget(self.log_text, 4, 0, 1, 2)
 
         self.node_tree = QtWidgets.QTreeWidget()
-        self.node_tree.setColumnCount(25)
+        self.node_tree.setColumnCount(26)
         self.node_tree.setHeaderLabels([
             "Node",
             "Name",
+            "Status",
             "Address",
             "Cmd",
             "Actual Cmd",
@@ -389,11 +414,13 @@ class BridgeWindow(QtWidgets.QWidget):
         signals_were_blocked = self.node_tree.blockSignals(True)
         try:
             self.node_tree.clear()
-            for node in self.node_registry.recent_nodes(max_age_seconds=60):
+            self._node_status_widgets.clear()
+            for node in self.node_registry.recent_nodes(max_age_seconds=NODE_OFFLINE_TIMEOUT_SECONDS):
                 item = QtWidgets.QTreeWidgetItem(
                     [
                         str(node.number),
                         node.name,
+                        "",
                         node.address,
                         str(node.command),
                         str(node.actual_command),
@@ -405,6 +432,18 @@ class BridgeWindow(QtWidgets.QWidget):
                     ]
                 )
                 self.node_tree.addTopLevelItem(item)
+                status_widget = QtWidgets.QWidget()
+                status_layout = QtWidgets.QHBoxLayout(status_widget)
+                status_layout.setContentsMargins(4, 0, 4, 0)
+                status_layout.setSpacing(5)
+                indicator = QtWidgets.QLabel()
+                indicator.setFixedSize(14, 14)
+                elapsed_label = QtWidgets.QLabel()
+                status_layout.addWidget(indicator)
+                status_layout.addWidget(elapsed_label)
+                status_layout.addStretch()
+                self.node_tree.setItemWidget(item, 2, status_widget)
+                self._node_status_widgets[node.number] = (indicator, elapsed_label)
                 for index, is_checked in enumerate(node.listen_channels):
                     checkbox = QtWidgets.QCheckBox()
                     checkbox.setChecked(is_checked)
@@ -415,11 +454,37 @@ class BridgeWindow(QtWidgets.QWidget):
                             node_number, channel, checked
                         )
                     )
-                    self.node_tree.setItemWidget(item, 9 + index, checkbox)
+                    self.node_tree.setItemWidget(item, 10 + index, checkbox)
                 if node.number == selected_node_number:
                     item.setSelected(True)
         finally:
             self.node_tree.blockSignals(signals_were_blocked)
+        self._refresh_node_status_indicators()
+
+    def _refresh_node_status_indicators(self) -> None:
+        now = time.time()
+        for index in reversed(range(self.node_tree.topLevelItemCount())):
+            item = self.node_tree.topLevelItem(index)
+            node_number = int(item.text(0))
+            node = self.node_registry.get_node(node_number)
+            if (
+                node is None
+                or node.last_seen_at is None
+                or now - node.last_seen_at >= NODE_OFFLINE_TIMEOUT_SECONDS
+            ):
+                self.node_tree.takeTopLevelItem(index)
+                self._node_status_widgets.pop(node_number, None)
+                continue
+
+            age_seconds = max(0, now - node.last_seen_at)
+            indicator, elapsed_label = self._node_status_widgets[node_number]
+            red, green, blue = node_status_color(age_seconds)
+            indicator.setStyleSheet(
+                f"background-color: rgb({red}, {green}, {blue}); "
+                "border: 1px solid #555; border-radius: 7px;"
+            )
+            elapsed_label.setText("< 1 sec" if age_seconds < 1 else f"{int(age_seconds)} sec")
+            elapsed_label.setToolTip(f"Last status received {age_seconds:.1f} seconds ago")
 
     def _save_node_channel(self, node_number: int, channel: int, checked: bool) -> None:
         node = self.node_registry.get_node(node_number)

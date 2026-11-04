@@ -53,13 +53,14 @@ regardless of the MIDI channel selected by the DAW.
 ## What the Tree View Shows
 
 ```
-Node │ Name        │ Address │ Cmd │ Actual Cmd │ Param │ Actual Param │ Voltage │ Charge │ Ch 1 │ Ch 2 │ ... │ Ch 16
-─────┼─────────────┼─────────┼─────┼────────────┼───────┼──────────────┼─────────┼────────┼──────┼──────┼─────┼───────
-1    │ Front Light │ 0x01    │ 100 │ 100        │ 50    │ 50           │ 3.3V    │ 85%    │  ☑   │  ☐   │ ... │  ☐
-2    │ Back Light  │ 0x02    │ 60  │ 0          │ 30    │ 0            │ 3.1V    │ 92%    │  ☐   │  ☑   │ ... │  ☐
+Node │ Name        │ Status      │ Address │ Cmd │ Actual Cmd │ Param │ Actual Param │ Voltage │ Charge │ Ch 1 │ Ch 2 │ ... │ Ch 16
+─────┼─────────────┼─────────────┼─────────┼─────┼────────────┼───────┼──────────────┼─────────┼────────┼──────┼──────┼─────┼───────
+1    │ Front Light │ 🟢 < 1 sec   │ 0x01    │ 100 │ 100        │ 50    │ 50           │ 3.3V    │ 85%    │  ☑   │  ☐   │ ... │  ☐
+2    │ Back Light  │ 🟡 3 sec     │ 0x02    │ 60  │ 0          │ 30    │ 0            │ 3.1V    │ 92%    │  ☐   │  ☑   │ ... │  ☐
 ```
 
 - Each **Ch 1–Ch 16** checkbox configures that MIDI channel for its node and is saved with the node settings.
+- **Status** fades from green to red over 5 seconds and shows the time since the last status message. Nodes disappear after 150 seconds without a status message.
 - **Cmd** = Last command sent from DAW
 - **Actual Cmd** = What node is currently executing
 - **Param** = Last parameter value sent
