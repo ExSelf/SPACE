@@ -9,7 +9,7 @@ from typing import Callable
 import serial
 from serial.tools import list_ports
 
-from space.packet import PACKET_SIZE, TYPE_STATUS, StatusPacket
+from space.packet import PACKET_SIZE, TYPE_STATUS, StatusPacket, get_packet_hmac_key
 
 
 def extract_status_frames(buffer: bytearray) -> list[bytes]:
@@ -26,7 +26,7 @@ def extract_status_frames(buffer: bytearray) -> list[bytes]:
             break
 
         frame = bytes(buffer[:PACKET_SIZE])
-        if frame[1] == 0 or frame[2] > 12 or StatusPacket.from_bytes(frame) is None:
+        if frame[1] == 0 or not 1 <= frame[2] <= 12 or StatusPacket.from_bytes(frame) is None:
             del buffer[0]
             continue
 
@@ -55,6 +55,7 @@ class SerialLink:
 
     def open(self) -> None:
         """Open the serial connection and start the receive thread."""
+        get_packet_hmac_key()
         if not self.port:
             ports = self.list_ports()
             if not ports:
@@ -114,7 +115,9 @@ class SerialLink:
         if len(payload) != PACKET_SIZE:
             raise ValueError(f"Expected a {PACKET_SIZE}-byte packet, got {len(payload)}")
 
-        self._serial.write(payload)
+        written = self._serial.write(payload)
+        if written != PACKET_SIZE:
+            raise RuntimeError(f"Sent {written} of {PACKET_SIZE} packet bytes to BEAM")
         self._serial.flush()
         print(f"Sent {PACKET_SIZE}-byte binary packet to {self.port}")
 

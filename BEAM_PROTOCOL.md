@@ -18,41 +18,39 @@ SUN Nodes (execute commands, send status)
 
 ## Packet Protocol
 
+Every 250-byte packet exchanged over USB serial is authenticated with the
+first 8 bytes of HMAC-SHA-256 over bytes 0-241. SPACE and BEAM use the shared
+`SUN_PACKET_HMAC_KEY`, which must also match SUN's key. Configure it in SPACE's
+environment before launch; do not store the key in source control. The HMAC
+replaces the former timestamp-echo and CRC trailer in bytes 242-249.
+
 ### Command Packets (MIDI → SUN)
 
-Command packets are sent from the SPACE bridge to SUN nodes via BEAM. They use a comma-separated format.
+Command packets are fixed-size binary frames broadcast by BEAM to SUN nodes.
 
-**Format:**
-```
-key,ttl,node,time_b0,time_b1,time_b2,time_b3,cmd0,cmd1,...,cmd11
-```
+| Byte offsets | Field |
+| --- | --- |
+| 0 | Packet type (`0x01`) |
+| 1-2 | Source node and TTL |
+| 3-10 | Global and command timestamps (little-endian `uint32`) |
+| 11-12 | Command and parameter |
+| 13-24 | 12 constant-command values |
+| 25 | Command update flags |
+| 26-27 | Constant-command update mask (little-endian `uint16`) |
+| 28-59 | 256-node target bitmap |
+| 60-241 | Reserved, included in the HMAC |
+| 242-249 | Truncated HMAC-SHA-256 authentication tag |
 
-**Fields:**
-- `key` (1): Always `1` for command packets
-- `ttl` (1-12): Time-To-Live value
-  - Set via UI slider (default: 3)
-  - When a node receives a command not for it, TTL is decreased and packet is bounced to neighbors
-  - Commands are only executed by the target node
-- `node` (1-255): Target node ID
-- `time_b0, time_b1, time_b2, time_b3` (0-255): Timestamp in milliseconds (little-endian 32-bit)
-- `cmd0...cmd11` (0-255): 12 command bytes representing node state
-  - Usually initialized from MIDI control_change messages
-  - Each byte represents a control parameter
-
-**Example:**
-```
-1,3,5,237,183,135,21,0,0,0,0,0,0,0,0,0,0,0,0
-│ │ │ └─────┬─────┘ └──────────┬──────────┘
-│ │ │       │                  └─ 12 command bytes (all zeros)
-│ │ │       └─ Timestamp (little-endian)
-│ │ └─ Node 5
-│ └─ TTL 3 (will bounce through 3 hops if not for target)
-└─ Command packet type
-```
+TTL is configured through the UI (default 3, valid range 1-12). The target
+bitmap selects which SUN nodes apply the command.
 
 ### Status Packets (SUN → MIDI)
 
 Status packets are sent from SUN nodes back through BEAM to inform the bridge of node status. These arrive ~10-100 times per second per node.
+
+They use the same 250-byte binary layout and HMAC trailer. The status payload
+includes node ID, TTL, timestamps, current command and parameter, constant
+commands, voltage in millivolts, and charge percentage.
 
 **Format:**
 ```

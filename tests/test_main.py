@@ -359,9 +359,10 @@ def test_command_retries_every_call_until_sun_reports_full_state_and_timestamp()
     assert 14 not in app._pending_commands
 
 
-def test_serial_link_sends_binary_packet_with_beam_line_terminator() -> None:
+def test_serial_link_sends_authenticated_binary_packet_without_terminator() -> None:
     link = SerialLink("/dev/cu.usbmodem01", 115200)
     link._serial = Mock(is_open=True)
+    link._serial.write.return_value = packet_module.PACKET_SIZE
     packet = packet_module.CommandPacket(
         node_id=14,
         ttl=3,
@@ -372,14 +373,15 @@ def test_serial_link_sends_binary_packet_with_beam_line_terminator() -> None:
 
     link.send(packet)
 
-    link._serial.write.assert_called_once_with(packet.to_bytes() + b"\n")
+    link._serial.write.assert_called_once_with(packet.to_bytes())
     link._serial.flush.assert_called_once_with()
 
 
 @pytest.mark.parametrize("delimiter", [b"\n", b"\r"])
-def test_serial_link_rejects_binary_packet_containing_beam_line_delimiter(delimiter: bytes) -> None:
+def test_serial_link_preserves_binary_delimiters_inside_authenticated_packet(delimiter: bytes) -> None:
     link = SerialLink("/dev/cu.usbmodem01", 115200)
     link._serial = Mock(is_open=True)
+    link._serial.write.return_value = packet_module.PACKET_SIZE
     packet = packet_module.CommandPacket(
         node_id=14,
         ttl=3,
@@ -388,10 +390,9 @@ def test_serial_link_rejects_binary_packet_containing_beam_line_delimiter(delimi
         global_timestamp_ms=0x12345678,
     )
 
-    with pytest.raises(ValueError, match="cannot carry carriage-return or newline bytes"):
-        link.send(packet)
+    link.send(packet)
 
-    link._serial.write.assert_not_called()
+    link._serial.write.assert_called_once_with(packet.to_bytes())
 
 
 def test_serial_port_selection_prefers_usb_device_over_macos_pseudo_ports() -> None:
@@ -491,32 +492,32 @@ def test_start_bridge_routes_serial_responses_to_gui_thread() -> None:
 
 
 def test_espnow_messages_strip_the_text_prefix_before_parsing() -> None:
-    packet = bytearray(250)
-    packet[0] = 0x02
-    packet[1] = 0x03
-    packet[2] = 0x03
-    packet[25:27] = (3300).to_bytes(2, byteorder="little")
-    packet[27] = 0x50
+    packet = packet_module.StatusPacket(
+        node_id=3,
+        ttl=3,
+        voltage_mv=3300,
+        charge_percent=0x50,
+    ).to_bytes()
 
-    raw = b"ESP_NOW_FROM 48:F6:EE:70:43:50 " + bytes(packet) + b"\n"
+    raw = b"ESP_NOW_FROM 48:F6:EE:70:43:50 " + packet + b"\n"
 
     extracted = packet_module.extract_espnow_payload(raw)
 
-    assert extracted == bytes(packet)
+    assert extracted == packet
     parsed = packet_module.StatusPacket.from_bytes(extracted)
     assert parsed is not None
     assert parsed.node_id == 3
     assert parsed.voltage_mv == 3300
     assert parsed.charge_percent == 80
 
-    command_packet = bytearray(250)
-    command_packet[0] = 0x01
-    command_packet[1] = 0x03
-    command_packet[2] = 0x03
-    command_packet[11] = 0x0A
-    command_packet[12] = 0x20
+    command_packet = packet_module.CommandPacket(
+        node_id=3,
+        ttl=3,
+        command=0x0A,
+        parameter=0x20,
+    ).to_bytes()
 
-    command_raw = b"ESP_NOW_FROM 48:F6:EE:70:43:50 " + bytes(command_packet) + b"\n"
+    command_raw = b"ESP_NOW_FROM 48:F6:EE:70:43:50 " + command_packet + b"\n"
     command_parsed = packet_module.CommandPacket.from_bytes(packet_module.extract_espnow_payload(command_raw))
     assert command_parsed is not None
     assert command_parsed.node_id == 3
@@ -553,20 +554,13 @@ def test_status_packet_log_is_controlled_by_checkbox(show_status_messages: bool)
 
 
 def test_beam_binary_serial_stream_frames_partial_packets_without_newline_splitting() -> None:
-    first = bytearray(250)
-    first[0] = packet_module.TYPE_STATUS
-    first[1] = 3
-    first[2] = 3
-    first[11] = 10
-    first[12] = 0x0A
-
-    second = bytearray(first)
-    second[1] = 4
+    first = packet_module.StatusPacket(node_id=3, ttl=3, parameter=0x0A).to_bytes()
+    second = packet_module.StatusPacket(node_id=4, ttl=3, parameter=0x0D).to_bytes()
     buffer = bytearray()
 
     buffer.extend(first[:37])
     assert extract_status_frames(buffer) == []
 
     buffer.extend(first[37:] + second)
-    assert extract_status_frames(buffer) == [bytes(first), bytes(second)]
+    assert extract_status_frames(buffer) == [first, second]
     assert buffer == b""

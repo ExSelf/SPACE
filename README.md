@@ -16,7 +16,7 @@ DAW (MIDI Output) → SPACE Bridge → BEAM Controller → SUN Nodes
 ## What It Does
 
 - **Listens** to MIDI note_on/note_off and control_change messages
-- **Converts** MIDI into CSV-formatted command packets with TTL routing
+- **Converts** MIDI into binary command packets with TTL routing
 - **Sends** packets over USB serial to BEAM controller
 - **Receives** status updates from SUN nodes (voltage, charge, command execution state)
 - **Displays** real-time node status in a tree view UI
@@ -37,10 +37,18 @@ DAW (MIDI Output) → SPACE Bridge → BEAM Controller → SUN Nodes
 - **MIDI Routing:** Send messages to nodes with status received within the last 60 seconds, regardless of MIDI channel
 
 ### Protocol
-- **Command Packets:** CSV format with TTL, node ID, timestamp, 12 command bytes
+- **Command Packets:** Fixed-size 250-byte binary frames with TTL, node ID,
+  timestamp, command data, and an HMAC-SHA-256 authentication tag
 - **Status Packets:** Incoming updates from nodes (~10-100 Hz per node)
-- **Efficient Encoding:** Compact comma-separated values (not JSON for status)
 - **Mesh Routing:** TTL-based command delivery through BEAM
+- **Serial Integrity:** SPACE and BEAM authenticate each frame with the shared
+  `SUN_PACKET_HMAC_KEY`, the same key used by SUN. The tag is the first 8 bytes
+  of HMAC-SHA-256 over packet bytes 0-241.
+
+Set `SUN_PACKET_HMAC_KEY` in SPACE's process environment before launching the
+app. It must match BEAM and SUN's key and contain at least 32 bytes. Keep the
+key out of source control. For example, set it in the shell used to start
+SPACE: `export SUN_PACKET_HMAC_KEY='<shared key>'`.
 
 ## Install
 

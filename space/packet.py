@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import struct
 import time
-import zlib
+import hmac
+import os
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -20,26 +21,40 @@ TARGET_BITMAP_SIZE = 32
 TARGET_BITMAP_OFFSET = 28
 COMMAND_FLAGS_OFFSET = 25
 CONSTANT_UPDATE_MASK_OFFSET = 26
-TIMESTAMP_ECHO_OFFSET = 242
-CRC_OFFSET = 246
+AUTHENTICATED_SIZE = 242
+AUTH_TAG_SIZE = 8
 COMMAND_UPDATE_STATE = 0x01
 COMMAND_UPDATE_CONSTANTS = 0x02
 
 
-def _finalize_packet(packet: bytearray, command_timestamp_ms: int) -> bytes:
-    struct.pack_into("<I", packet, TIMESTAMP_ECHO_OFFSET, command_timestamp_ms & 0xFFFFFFFF)
-    struct.pack_into("<I", packet, CRC_OFFSET, zlib.crc32(packet[:CRC_OFFSET]))
+def get_packet_hmac_key() -> bytes:
+    key = os.environ.get("SUN_PACKET_HMAC_KEY")
+    if key is None:
+        raise RuntimeError("Set SUN_PACKET_HMAC_KEY to the shared SUN/BEAM key before starting SPACE")
+    key_bytes = key.encode("utf-8")
+    if len(key_bytes) < 32:
+        raise RuntimeError("SUN_PACKET_HMAC_KEY must be at least 32 bytes")
+    return key_bytes
+
+
+def _finalize_packet(packet: bytearray) -> bytes:
+    packet[AUTHENTICATED_SIZE:] = hmac.new(
+        get_packet_hmac_key(),
+        packet[:AUTHENTICATED_SIZE],
+        "sha256",
+    ).digest()[:AUTH_TAG_SIZE]
     return bytes(packet)
 
 
 def _valid_packet(data: bytes, packet_type: int) -> bool:
-    return (
-        len(data) == PACKET_SIZE
-        and data[0] == packet_type
-        and struct.unpack_from("<I", data, TIMESTAMP_ECHO_OFFSET)[0]
-        == struct.unpack_from("<I", data, 7)[0]
-        and struct.unpack_from("<I", data, CRC_OFFSET)[0] == zlib.crc32(data[:CRC_OFFSET])
-    )
+    if len(data) != PACKET_SIZE or data[0] != packet_type:
+        return False
+    expected_tag = hmac.new(
+        get_packet_hmac_key(),
+        data[:AUTHENTICATED_SIZE],
+        "sha256",
+    ).digest()[:AUTH_TAG_SIZE]
+    return hmac.compare_digest(data[AUTHENTICATED_SIZE:], expected_tag)
 
 
 def target_bitmap_for_nodes(node_ids: list[int]) -> bytes:
@@ -102,8 +117,7 @@ class CommandPacket:
         [26-27] constant command update mask (uint16_le)
         [28-59] target bitmap (256 bits, bit N selects node N)
         [60-241] reserved
-        [242-245] repeated command timestamp
-        [246-249] CRC-32/ISO-HDLC over bytes 0-245
+        [242-249] first 8 bytes of HMAC-SHA-256 over bytes 0-241
         """
         packet = bytearray(PACKET_SIZE)
         
@@ -134,7 +148,7 @@ class CommandPacket:
         packet[COMMAND_FLAGS_OFFSET] = self.flags & 0xFF
         struct.pack_into("<H", packet, CONSTANT_UPDATE_MASK_OFFSET, self.constant_update_mask & 0xFFFF)
         packet[TARGET_BITMAP_OFFSET:TARGET_BITMAP_OFFSET + TARGET_BITMAP_SIZE] = self.target_bitmap
-        return _finalize_packet(packet, self.cmd_timestamp_ms)
+        return _finalize_packet(packet)
 
     @staticmethod
     def from_bytes(data: bytes) -> CommandPacket | None:
@@ -202,8 +216,7 @@ class StatusPacket:
         [27]    charge_percent (0-100%)
         [28-59] unused target bitmap
         [60-241] reserved
-        [242-245] repeated command timestamp
-        [246-249] CRC-32/ISO-HDLC over bytes 0-245
+        [242-249] first 8 bytes of HMAC-SHA-256 over bytes 0-241
         """
         packet = bytearray(PACKET_SIZE)
         
@@ -233,7 +246,7 @@ class StatusPacket:
         struct.pack_into('<H', packet, 25, self.voltage_mv & 0xFFFF)
         packet[27] = self.charge_percent & 0xFF
         
-        return _finalize_packet(packet, self.cmd_timestamp_ms)
+        return _finalize_packet(packet)
 
     @staticmethod
     def from_bytes(data: bytes) -> StatusPacket | None:
