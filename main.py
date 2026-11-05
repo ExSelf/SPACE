@@ -416,7 +416,7 @@ class BridgeWindow(QtWidgets.QWidget):
         except Exception as exc:
             self.serial_link = None
             self._beam_monitor_started_at = None
-            error = f"Unable to open serial port {serial_port}: {exc}"
+            error = f"Unable to initialize serial link on {serial_port}: {exc}"
             if self._last_serial_connect_error != error:
                 self._schedule_log(f"Serial link unavailable: {error}")
                 self._last_serial_connect_error = error

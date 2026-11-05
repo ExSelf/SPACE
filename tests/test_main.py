@@ -195,7 +195,7 @@ def test_process_midi_ignores_note_off_without_indexing_empty_packets() -> None:
     assert app._pending_commands == {}
 
 
-def test_midi_packets_target_nodes_configured_for_the_channel() -> None:
+def test_midi_packets_target_recent_nodes_configured_for_the_channel() -> None:
     registry = NodeRegistry(initialize_default_nodes=False)
     offline_assigned = NodeState(
         number=3,
@@ -203,7 +203,12 @@ def test_midi_packets_target_nodes_configured_for_the_channel() -> None:
         address="0x03",
         listen_channels=[False] * 13 + [True] + [False] * 2,
     )
-    online = NodeState(number=255, name="Online", address="0xff")
+    online = NodeState(
+        number=255,
+        name="Online",
+        address="0xff",
+        listen_channels=[False] * 13 + [True] + [False] * 2,
+    )
     registry.add_node(offline_assigned)
     registry.add_node(online)
     registry.update_node_status(node_number=255)
@@ -213,7 +218,9 @@ def test_midi_packets_target_nodes_configured_for_the_channel() -> None:
         node_registry=registry,
     )
 
-    assert [packet.node_id for packet in packets] == [3]
+    assert len(packets) == 1
+    assert packets[0].target_nodes == [255]
+    assert packets[0].node_id == 0
 
 
 def test_midi_packets_do_not_fall_back_to_channel_node_when_none_are_online() -> None:
@@ -268,9 +275,11 @@ def test_process_midi_logs_serial_send_failure() -> None:
     app.ttl_slider.value.return_value = 3
     app.node_registry = Mock()
     node = NodeState(number=1, name="Node 1", address="0x01")
-    app.node_registry.nodes_for_midi_channel.return_value = [node]
+    node.listen_channels[13] = True
+    app.node_registry.recent_nodes.return_value = [node]
     app.node_registry.get_node.return_value = node
     app.serial_link = Mock()
+    app.serial_link.is_open.return_value = True
     app.serial_link.send.side_effect = AttributeError("to_wire_payload is unavailable")
     app._refresh_node_view = Mock()
     app._schedule_log = Mock()
@@ -280,7 +289,7 @@ def test_process_midi_logs_serial_send_failure() -> None:
     app._process_midi(mido.Message("note_on", channel=13, note=21, velocity=122))
 
     assert any(
-        "MIDI packet not sent to node 1: to_wire_payload is unavailable" in call.args[0]
+        "MIDI packet not sent to nodes [1]: to_wire_payload is unavailable" in call.args[0]
         for call in app._schedule_log.call_args_list
     )
 
@@ -310,7 +319,8 @@ def test_process_midi_updates_the_online_node_after_successful_send() -> None:
     assert node.command == 60
     assert node.parameter == 100
     app.serial_link.send.assert_called_once()
-    assert app.serial_link.send.call_args.args[0].node_id == 255
+    assert app.serial_link.send.call_args.args[0].node_id == 0
+    assert app.serial_link.send.call_args.args[0].target_nodes == [255]
     app._refresh_node_view.assert_called_once()
     assert 255 in app._pending_commands
 
@@ -324,6 +334,7 @@ def test_command_retries_every_call_until_sun_reports_full_state_and_timestamp()
         listen_channels=[False] * 13 + [True] + [False] * 2,
     )
     registry.add_node(node)
+    registry.update_node_status(node_number=14)
     app = main.BridgeApp.__new__(main.BridgeApp)
     app.ttl_slider = Mock()
     app.ttl_slider.value.return_value = 3
@@ -343,6 +354,7 @@ def test_command_retries_every_call_until_sun_reports_full_state_and_timestamp()
     assert packet.cmd_timestamp_ms != 0
     assert app.serial_link.send.call_count == 1
 
+    app._last_command_send_at = 0
     app._retry_pending_commands()
     assert app.serial_link.send.call_count == 2
 
@@ -435,6 +447,22 @@ def test_serial_port_scan_discovers_and_connects_new_usb_device() -> None:
     app._command_retry_timer.start.assert_called_once_with()
 
 
+def test_serial_initialization_error_is_not_mislabeled_as_port_open_failure() -> None:
+    app = main.BridgeApp.__new__(main.BridgeApp)
+    app._beam_monitor_started_at = None
+    app._last_serial_connect_error = None
+    app._schedule_log = Mock()
+
+    with patch("main.SerialLink") as serial_cls:
+        serial_cls.return_value.open.side_effect = RuntimeError("invalid secrets.ini key")
+
+        assert app._open_serial_link("/dev/test") is False
+
+    logged_message = app._schedule_log.call_args.args[0]
+    assert "Unable to initialize serial link on /dev/test: invalid secrets.ini key" in logged_message
+    assert "Unable to open serial port" not in logged_message
+
+
 def test_global_time_formats_milliseconds_as_hours_minutes_seconds() -> None:
     assert main.format_global_time(3_723_000) == "01:02:03"
     assert main.format_global_time(86_401_000) == "00:00:01"
@@ -523,6 +551,22 @@ def test_espnow_messages_strip_the_text_prefix_before_parsing() -> None:
     assert command_parsed.node_id == 3
     assert command_parsed.command == 0x0A
     assert command_parsed.parameter == 0x20
+
+
+def test_prefixed_binary_frame_preserves_newline_bytes_in_hmac() -> None:
+    packet = next(
+        candidate
+        for timestamp in range(1000)
+        if (candidate := packet_module.StatusPacket(
+            node_id=3,
+            ttl=3,
+            global_timestamp_ms=timestamp,
+        ).to_bytes()).endswith(b"\n")
+    )
+    prefix = b"ESP_NOW_FROM 48:F6:EE:70:43:50 "
+
+    assert packet_module.extract_espnow_payload(prefix + packet) == packet
+    assert packet_module.extract_espnow_payload(prefix + packet + b"\n") == packet
 
 
 @pytest.mark.parametrize("show_status_messages", [False, True])

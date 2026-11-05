@@ -1,4 +1,5 @@
 mido
+python-rtmidi
 pyserial
 PySide6
 pyinstaller

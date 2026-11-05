@@ -45,10 +45,15 @@ DAW (MIDI Output) → SPACE Bridge → BEAM Controller → SUN Nodes
   `SUN_PACKET_HMAC_KEY`, the same key used by SUN. The tag is the first 8 bytes
   of HMAC-SHA-256 over packet bytes 0-241.
 
-Set `SUN_PACKET_HMAC_KEY` in SPACE's process environment before launching the
-app. It must match BEAM and SUN's key and contain at least 32 bytes. Keep the
-key out of source control. For example, set it in the shell used to start
-SPACE: `export SUN_PACKET_HMAC_KEY='<shared key>'`.
+Set `SUN_PACKET_HMAC_KEY` in the ignored `secrets.ini` file in the project
+root, replacing its placeholder with the key shared by BEAM and SUN (at least
+32 bytes). SPACE also accepts the `SUN_PACKET_HMAC_KEY` environment variable,
+which takes precedence over the INI file. Never commit the real key.
+
+```ini
+[security]
+SUN_PACKET_HMAC_KEY = your-shared-key
+```
 
 ## Install
 
@@ -73,6 +78,10 @@ source .venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+The requirements include `python-rtmidi`, which Mido uses to discover and
+open MIDI input devices. When launching a packaged app, keep `secrets.ini`
+next to the `.app` bundle or in one of its parent directories.
 
 ## Run the App
 
@@ -151,7 +160,7 @@ pylint space/ main.py
 On macOS, build and open the named app bundle:
 
 ```bash
-python3 -m PyInstaller --name SPACE --windowed --add-data "window_preferences.json:." main.py
+python3 -m PyInstaller SPACE.spec
 open dist/SPACE.app
 ```
 

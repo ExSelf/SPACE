@@ -120,6 +120,10 @@
 		<data>
 		ntgtBJOS7PtvfYDadneCv9nVX4Q=
 		</data>
+		<key>Resources/PySide6/Qt/translations/qt_help_kk.qm</key>
+		<data>
+		PvYgeYRI7kz36pwIq8Xg7norrDM=
+		</data>
 		<key>Resources/PySide6/Qt/translations/qt_help_ko.qm</key>
 		<data>
 		rqIuSg0hOWczgCx6tzjd0Dc3t9Y=
@@ -191,6 +195,10 @@
 		<key>Resources/PySide6/Qt/translations/qt_ka.qm</key>
 		<data>
 		RuPH1lBlSGVQ0s2cO4aK+GzIQpg=
+		</data>
+		<key>Resources/PySide6/Qt/translations/qt_kk.qm</key>
+		<data>
+		OrxqvHxIkHwvbXFYltgVPc59TuQ=
 		</data>
 		<key>Resources/PySide6/Qt/translations/qt_ko.qm</key>
 		<data>
@@ -282,7 +290,7 @@
 		</data>
 		<key>Resources/PySide6/Qt/translations/qtbase_de.qm</key>
 		<data>
-		5yDgtEq6OrhHSOFOMCSeAkqcALE=
+		wJt7t/lD6G3biFa0v8wm3TN5TjI=
 		</data>
 		<key>Resources/PySide6/Qt/translations/qtbase_en.qm</key>
 		<data>
@@ -331,6 +339,10 @@
 		<key>Resources/PySide6/Qt/translations/qtbase_ka.qm</key>
 		<data>
 		DBt0dSK7Kh4yZym7+RpG4pl6Z0A=
+		</data>
+		<key>Resources/PySide6/Qt/translations/qtbase_kk.qm</key>
+		<data>
+		O7d/dSRAt++gFlqomgImn0Sgo5M=
 		</data>
 		<key>Resources/PySide6/Qt/translations/qtbase_ko.qm</key>
 		<data>
@@ -1130,7 +1142,7 @@
 		</data>
 		<key>Resources/base_library.zip</key>
 		<data>
-		USj8OLpZO7LkAd4NssfnElId65M=
+		ML3295scFUJ+XOMBOEYZjuGiHE4=
 		</data>
 		<key>Resources/icon-windowed.icns</key>
 		<data>
@@ -1150,7 +1162,7 @@
 		</data>
 		<key>Resources/mido-1.3.3.dist-info/RECORD</key>
 		<data>
-		1vCB4bVd/wQsLcnNbMKBB+ij5UM=
+		j4wZaXuEhfefoKBGyffk8HetJ+E=
 		</data>
 		<key>Resources/mido-1.3.3.dist-info/REQUESTED</key>
 		<data>
@@ -1227,343 +1239,343 @@
 		<dict>
 			<key>cdhash</key>
 			<data>
-			7OcrvEXJ1xpPTq4MGOdXkunLI7I=
+			Q1o1nRGzRY9KY7j09WdJN0riT4A=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"ece72bbc45c9d71a4f4eae0c18e75792e9cb23b2"</string>
+			<string>cdhash H"435a359d11b3458f4a63b8f4f56749374ae24f80"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtDBus.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			kbsyuAnjDn2lj4swZ3vx4wZW+Es=
+			w+J3Swr2OR0RL7cXs8ccDGW/KwU=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"91bb32b809e30e7da58f8b30677bf1e30656f84b"</string>
+			<string>cdhash H"c3e2774b0af6391d112fb717b3c71c0c65bf2b05"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtGui.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			VRgjzvyUVUsKwj+QznccQOmasw8=
+			Yoi2IQIWPPp81wnGWFzuLcqtGjc=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"551823cefc94554b0ac23f90ce771c40e99ab30f"</string>
+			<string>cdhash H"6288b62102163cfa7cd709c6585cee2dcaad1a37"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtNetwork.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			Xjk2xO1DXYaPfTJZ4vdK99Jll9k=
+			gr3/CZhNdSDIMLQABM5QxRJ20uA=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"5e3936c4ed435d868f7d3259e2f74af7d26597d9"</string>
+			<string>cdhash H"82bdff09984d7520c830b40004ce50c51276d2e0"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtOpenGL.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			c7gbqCbxhluod/5qi/rBwR9q7EM=
+			wVSdMr9AvB4NGMNJ9Cf+LlNJjWA=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"73b81ba826f1865ba877fe6a8bfac1c11f6aec43"</string>
+			<string>cdhash H"c1549d32bf40bc1e0d18c349f427fe2e53498d60"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtPdf.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			YOZubmAanZUfPh8AyShA064leq0=
+			5ZBwcYgvPYWIOjnao366nkcDdI4=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"60e66e6e601a9d951f3e1f00c92840d3ae257aad"</string>
+			<string>cdhash H"e5907071882f3d85883a39daa37eba9e4703748e"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtQml.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			9RQv//00ce6kpWzQAV0BHBzKLBE=
+			9NgBIdr2m6feXpLpQsZuHr6aZtw=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"f5142ffffd3471eea4a56cd0015d011c1cca2c11"</string>
+			<string>cdhash H"f4d80121daf69ba7de5e92e942c66e1ebe9a66dc"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtQmlMeta.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			8DymizAyTItM8mSDDFJWvIofurc=
+			8jzg2FDAhCqRZcgbNGmVeeR//U0=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"f03ca68b30324c8b4cf264830c5256bc8a1fbab7"</string>
+			<string>cdhash H"f23ce0d850c0842a9165c81b34699579e47ffd4d"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtQmlModels.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			9JeulSWdtuEH6B6ajxTNO96Mflo=
+			r4fPogUMISl0JzmAzw5wAuYxhC0=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"f497ae95259db6e107e81e9a8f14cd3bde8c7e5a"</string>
+			<string>cdhash H"af87cfa2050c212974273980cf0e7002e631842d"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtQmlWorkerScript.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			luvoCWNzETFp8zssmOw7IFilVHE=
+			cUhY4kMyk6BeShRFFCTWoQ5eSkg=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"96ebe8096373113169f33b2c98ec3b2058a55471"</string>
+			<string>cdhash H"714858e2433293a05e4a14451424d6a10e5e4a48"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtQuick.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			n7KdHOO37I1u/PC0xlTwI22E8oU=
+			XiSy7LDVZ8FRxe83yFAJHnGM1Jk=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"9fb29d1ce3b7ec8d6efcf0b4c654f0236d84f285"</string>
+			<string>cdhash H"5e24b2ecb0d567c151c5ef37c850091e718cd499"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtSvg.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			4D1pTBdvWCilZEvtdgK7m339b24=
+			I65r6JRigE77VrX2lRB3S6gi8tY=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"e03d694c176f5828a5644bed7602bb9b7dfd6f6e"</string>
+			<string>cdhash H"23ae6be89462804efb56b5f69510774ba822f2d6"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtVirtualKeyboard.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			g2daTqj4qnu+bYkctkgqJHwhBPE=
+			GRVSV8B46SmY1TVtudI/SQum8ks=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"83675a4ea8f8aa7bbe6d891cb6482a247c2104f1"</string>
+			<string>cdhash H"19155257c078e92998d5356db9d23f490ba6f24b"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtVirtualKeyboardQml.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			AZ5wkcfqqTofIf4s6NLNUx993N8=
+			28ZNpHegDl5IHsU8pe0GwZfkaVM=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"019e7091c7eaa93a1f21fe2ce8d2cd531f7ddcdf"</string>
+			<string>cdhash H"dbc64da477a00e5e481ec53ca5ed06c197e46953"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/lib/QtWidgets.framework</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			T0NgRShNwUeiDWacSfXkCNBFLYw=
+			huDywA1jeBRK1f1dBVB1CTHp9k4=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"4f436045284dc147a20d669c49f5e408d0452d8c"</string>
+			<string>cdhash H"86e0f2c00d6378144ad5fd5d0550750931e9f64e"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/generic/libqtuiotouchplugin.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			J3kqI2gHmEDqJKaXU7D5MTFmWM0=
+			qBqW26zDPP77jWYJ29qnouJQdio=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"27792a2368079840ea24a69753b0f931316658cd"</string>
+			<string>cdhash H"a81a96dbacc33cfefb8d6609dbdaa7a2e250762a"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/iconengines/libqsvgicon.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			fFq6CpUScvU6wdHMVccU5eYfDRo=
+			epNaoYkD4Z+gPdiKAhq/bgj6R9M=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"7c5aba0a951272f53ac1d1cc55c714e5e61f0d1a"</string>
+			<string>cdhash H"7a935aa18903e19fa03dd88a021abf6e08fa47d3"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqgif.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			odFb1ThJchLhzPe8mPttrNT5MWo=
+			dxYpQ/o9+ht2yACiNKmGK2qT8SU=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"a1d15bd538497212e1ccf7bc98fb6dacd4f9316a"</string>
+			<string>cdhash H"77162943fa3dfa1b76c800a234a9862b6a93f125"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqicns.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			YJUs4Bt0iCM0M33V0KaL9aky3VQ=
+			FvK+vb3N9FLOylekqydbY9Y7UCY=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"60952ce01b74882334337dd5d0a68bf5a932dd54"</string>
+			<string>cdhash H"16f2bebdbdcdf452ceca57a4ab275b63d63b5026"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqico.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			9lvtRqhMQvxZIJyIyY/8ZWyBSlY=
+			jp9GC7V3fwVwlbfyLIzHJ5kxPCU=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"f65bed46a84c42fc59209c88c98ffc656c814a56"</string>
+			<string>cdhash H"8e9f460bb5777f057095b7f22c8cc72799313c25"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqjpeg.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			eWZLll1/OsDCb8o0a4WvMgmui8U=
+			x8u9xhR/LOZWSitHo0zucB/GVoc=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"79664b965d7f3ac0c26fca346b85af3209ae8bc5"</string>
+			<string>cdhash H"c7cbbdc6147f2ce6564a2b47a34cee701fc65687"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqmacheif.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			9vKkMgmZIkD6YAbKyXXd9tN/QZ4=
+			HGgHX6jJaJOc5Qo9eq35O7H/BxA=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"f6f2a43209992240fa6006cac975ddf6d37f419e"</string>
+			<string>cdhash H"1c68075fa8c968939ce50a3d7aadf93bb1ff0710"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqmacjp2.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			Z8Jjhv55JZyTjB0+xHQdas2sW2w=
+			TnDeMYsFkZxAzmkIdbS8ma4X8kg=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"67c26386fe79259c938c1d3ec4741d6acdac5b6c"</string>
+			<string>cdhash H"4e70de318b05919c40ce690875b4bc99ae17f248"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqpdf.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			ofuRJE1+xJDN+s3SGNo4OberLJM=
+			LD8U+zaj99Vrsx+rN3WWmaJKpcg=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"a1fb91244d7ec490cdfacdd218da3839b7ab2c93"</string>
+			<string>cdhash H"2c3f14fb36a3f7d56bb31fab37759699a24aa5c8"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqsvg.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			UtlteYoNtU0mEiZeeO5QUzvI61I=
+			+ZP/y6EE0zpx+QLPRSCQ59xO1jc=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"52d96d798a0db54d2612265e78ee50533bc8eb52"</string>
+			<string>cdhash H"f993ffcba104d33a71f902cf452090e7dc4ed637"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqtga.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			32Weozws17p2XDUjERAV2MGZ3dM=
+			P4aGLuTXyUcWRRIoicjnkeDWWAU=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"df659ea33c2cd7ba765c3523111015d8c199ddd3"</string>
+			<string>cdhash H"3f86862ee4d7c9471645122889c8e791e0d65805"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqtiff.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			Vzq2NiGtg8BpQtKuA6ieMuqJ8PI=
+			r8k3IEnvVsct/p2OqUlfoGc6G8Q=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"573ab63621ad83c06942d2ae03a89e32ea89f0f2"</string>
+			<string>cdhash H"afc9372049ef56c72dfe9d8ea9495fa0673a1bc4"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqwbmp.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			uAwZ1wgi1HQkHcBL6IamW3gsxdU=
+			+NCGEg5PRuQJfB/0gKNuT/TBcto=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"b80c19d70822d474241dc04be886a65b782cc5d5"</string>
+			<string>cdhash H"f8d086120e4f46e4097c1ff480a36e4ff4c172da"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/imageformats/libqwebp.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			XRxXeSmuzSnrpAFI2bsTJ02cNnE=
+			egB46/uLpT5nmECPRRdb7ynHKKI=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"5d1c577929aecd29eba40148d9bb13274d9c3671"</string>
+			<string>cdhash H"7a0078ebfb8ba53e6798408f45175bef29c728a2"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/networkinformation/libqapplenetworkinformation.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			1u2gvQhNNZ1eMUqztoRbpu1uko0=
+			ixbJ8PrzC5oMOHZZ68ytc8KKKiQ=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"d6eda0bd084d359d5e314ab3b6845ba6ed6e928d"</string>
+			<string>cdhash H"8b16c9f0faf30b9a0c387659ebccad73c28a2a24"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/platforminputcontexts/libqtvirtualkeyboardplugin.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			kZRn8nPsJkfM79+DgUI8WWtOP9E=
+			wom7DnBeB0ZqRf7SjftLX7CiRRw=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"919467f273ec2647ccefdf8381423c596b4e3fd1"</string>
+			<string>cdhash H"c289bb0e705e07466a45fed28dfb4b5fb0a2451c"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/platforms/libqcocoa.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			ywTmRc4oTx5om5zGWc+0vBNmogU=
+			ErFxcvN2x5x2EGatX2ukEXN0RoA=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"cb04e645ce284f1e689b9cc659cfb4bc1366a205"</string>
+			<string>cdhash H"12b17172f376c79c761066ad5f6ba41173744680"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/platforms/libqminimal.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			+eISadQdby2c7hE6EdUn+VLV17I=
+			plGS/PsOOQ7ld7Kn5QxPAkUHNR8=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"f9e21269d41d6f2d9cee113a11d527f952d5d7b2"</string>
+			<string>cdhash H"a65192fcfb0e390ee577b2a7e50c4f024507351f"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/platforms/libqoffscreen.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			We+yLu8dohbI5E8vB8uqGOmxLiM=
+			LX8k+drNDkEOnHS7bwx0xoOe2Fw=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"59efb22eef1da216c8e44f2f07cbaa18e9b12e23"</string>
+			<string>cdhash H"2d7f24f9dacd0e410e9c74bb6f0c74c6839ed85c"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/styles/libqmacstyle.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			ku5+uy8fxHKZHnsdYjhrSqk7nfw=
+			jZ0nrEO87+E78s7sRzPCiTNsRbU=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"92ee7ebb2f1fc472991e7b1d62386b4aa93b9dfc"</string>
+			<string>cdhash H"8d9d27ac43bcefe13bf2ceec4733c289336c45b5"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/tls/libqcertonlybackend.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			DXxSRCZMzW4emjYbMkwMqrdeh64=
+			byHm5EM0FQj/1T4UJebsahzp3xs=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"0d7c5244264ccd6e1e9a361b324c0caab75e87ae"</string>
+			<string>cdhash H"6f21e6e443341508ffd53e1425e6ec6a1ce9df1b"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/tls/libqopensslbackend.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			+MblZemANm6D2Kr3g22q/UQNvh4=
+			3JWuZ2jx7f07bDKOrACNgTS7mbM=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"f8c6e565e980366e83d8aaf7836daafd440dbe1e"</string>
+			<string>cdhash H"dc95ae6768f1edfd3b6c328eac008d8134bb99b3"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/plugins/tls/libqsecuretransportbackend.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			etUup35Hta4invUNk00mAQi2PFw=
+			CQbBoWxZRz8oNbpd1X4JImBoVcM=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"7ad52ea77e47b5ae229ef50d934d260108b63c5c"</string>
+			<string>cdhash H"0906c1a16c59473f2835ba5dd57e0922606855c3"</string>
 		</dict>
 		<key>Frameworks/PySide6/Qt/translations</key>
 		<dict>
@@ -1574,55 +1586,55 @@
 		<dict>
 			<key>cdhash</key>
 			<data>
-			Dxtkajs0QS15DcBUkVhuoNzuoww=
+			TpuFB5r9//BPFhDYrqSptSsl3+M=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"0f1b646a3b34412d790dc05491586ea0dceea30c"</string>
+			<string>cdhash H"4e9b85079afdfff04f1610d8aea4a9b52b25dfe3"</string>
 		</dict>
 		<key>Frameworks/PySide6/QtDBus.abi3.so</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			SB6IQnmhSapOx5Ik0vlluCgX8Ko=
+			mchUpiC55PvL3s4U37qK+2k8Ozc=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"481e884279a149aa4ec79224d2f965b82817f0aa"</string>
+			<string>cdhash H"99c854a620b9e4fbcbdece14dfba8afb693c3b37"</string>
 		</dict>
 		<key>Frameworks/PySide6/QtGui.abi3.so</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			QZ2ao95CNg31gnVf7jeSpf4sw5M=
+			XDjnmx/2dkIDcgLkgYnHmp+PhOI=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"419d9aa3de42360df582755fee3792a5fe2cc393"</string>
+			<string>cdhash H"5c38e79b1ff67642037202e48189c79a9f8f84e2"</string>
 		</dict>
 		<key>Frameworks/PySide6/QtNetwork.abi3.so</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			AsFprcUzQXQMDDKNZ/VbHgP5S4w=
+			rkb/xmGJCL9QHlUC8kqqoj4PQOw=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"02c169adc53341740c0c328d67f55b1e03f94b8c"</string>
+			<string>cdhash H"ae46ffc6618908bf501e5502f24aaaa23e0f40ec"</string>
 		</dict>
 		<key>Frameworks/PySide6/QtWidgets.abi3.so</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			meRBzwSyQs0sZuVk7v/IJ7qXHfo=
+			ykzCsHzKuowDc8D8pSW5IPuzzcg=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"99e441cf04b242cd2c66e564eeffc827ba971dfa"</string>
+			<string>cdhash H"ca4cc2b07ccaba8c0373c0fca525b920fbb3cdc8"</string>
 		</dict>
-		<key>Frameworks/PySide6/libpyside6.abi3.6.11.dylib</key>
+		<key>Frameworks/PySide6/libpyside6.abi3.6.12.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			emBz+fRoPRrWudYpRtdesCBtaH8=
+			4IaMpq/h4vo66CvVXBM9NxTh7JA=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"7a6073f9f4683d1ad6b9d62946d75eb0206d687f"</string>
+			<string>cdhash H"e0868ca6afe1e2fa3ae82bd55c133d3714e1ec90"</string>
 		</dict>
 		<key>Frameworks/Python</key>
 		<dict>
@@ -1755,15 +1767,15 @@
 			<key>requirement</key>
 			<string>cdhash H"ea44e4e9e0bb0ebc53bf99366b0d05544fecb8bc"</string>
 		</dict>
-		<key>Frameworks/libpyside6.abi3.6.11.dylib</key>
+		<key>Frameworks/libpyside6.abi3.6.12.dylib</key>
 		<dict>
 			<key>symlink</key>
-			<string>PySide6/libpyside6.abi3.6.11.dylib</string>
+			<string>PySide6/libpyside6.abi3.6.12.dylib</string>
 		</dict>
-		<key>Frameworks/libshiboken6.abi3.6.11.dylib</key>
+		<key>Frameworks/libshiboken6.abi3.6.12.dylib</key>
 		<dict>
 			<key>symlink</key>
-			<string>shiboken6/libshiboken6.abi3.6.11.dylib</string>
+			<string>shiboken6/libshiboken6.abi3.6.12.dylib</string>
 		</dict>
 		<key>Frameworks/libssl.3.dylib</key>
 		<dict>
@@ -1783,15 +1795,6 @@
 		<dict>
 			<key>symlink</key>
 			<string>python3__dot__13</string>
-		</dict>
-		<key>Frameworks/python3__dot__13/lib-dynload/_asyncio.cpython-313-darwin.so</key>
-		<dict>
-			<key>cdhash</key>
-			<data>
-			F9vLTOyPEk+H3YMdoRKNdK1L3dA=
-			</data>
-			<key>requirement</key>
-			<string>cdhash H"17dbcb4cec8f124f87dd831da1128d74ad4bddd0"</string>
 		</dict>
 		<key>Frameworks/python3__dot__13/lib-dynload/_bisect.cpython-313-darwin.so</key>
 		<dict>
@@ -2261,6 +2264,15 @@
 			<key>requirement</key>
 			<string>cdhash H"440fb8c28ac7b28d81d3c29b0211b16a3eb7b2d3"</string>
 		</dict>
+		<key>Frameworks/rtmidi/_rtmidi.cpython-313-darwin.so</key>
+		<dict>
+			<key>cdhash</key>
+			<data>
+			X+GDFWUEfhITzShVHXiMB78SrVo=
+			</data>
+			<key>requirement</key>
+			<string>cdhash H"5fe1831565047e1213cd28551d788c07bf12ad5a"</string>
+		</dict>
 		<key>Frameworks/setuptools</key>
 		<dict>
 			<key>symlink</key>
@@ -2270,19 +2282,19 @@
 		<dict>
 			<key>cdhash</key>
 			<data>
-			1QJ44UlZId5t+DRcIMd8cnvopM8=
+			h27wTl1js+nuRQGAAdkGngKvYi4=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"d50278e1495921de6df8345c20c77c727be8a4cf"</string>
+			<string>cdhash H"876ef04e5d63b3e9ee45018001d9069e02af622e"</string>
 		</dict>
-		<key>Frameworks/shiboken6/libshiboken6.abi3.6.11.dylib</key>
+		<key>Frameworks/shiboken6/libshiboken6.abi3.6.12.dylib</key>
 		<dict>
 			<key>cdhash</key>
 			<data>
-			AEBJgPOt4AWP23grOufwHV/UX3E=
+			at86h5+n0fn/aA8H5TUJyuuOuEo=
 			</data>
 			<key>requirement</key>
-			<string>cdhash H"00404980f3ade0058fdb782b3ae7f01d5fd45f71"</string>
+			<string>cdhash H"6adf3a879fa7d1f9ff680f07e53509caeb8eb84a"</string>
 		</dict>
 		<key>Frameworks/tcl8</key>
 		<dict>
@@ -2502,6 +2514,13 @@
 			FZx0+Us4S17mr984ts/EgGvJns9zvgLUpwIdTOun7H4=
 			</data>
 		</dict>
+		<key>Resources/PySide6/Qt/translations/qt_help_kk.qm</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			3pK3vEaZjaS+ywf4EOeUfw4i1fe/FSuL176QN1An36A=
+			</data>
+		</dict>
 		<key>Resources/PySide6/Qt/translations/qt_help_ko.qm</key>
 		<dict>
 			<key>hash2</key>
@@ -2626,6 +2645,13 @@
 			<key>hash2</key>
 			<data>
 			ALZ8bfwlUHm1uYpWQPglGclrJSCgKGgvukB4s510Pqo=
+			</data>
+		</dict>
+		<key>Resources/PySide6/Qt/translations/qt_kk.qm</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			I/fMrXW4stcOsO0PyRDazGZ+n/Ze0eMoxlJjrS0XLNo=
 			</data>
 		</dict>
 		<key>Resources/PySide6/Qt/translations/qt_ko.qm</key>
@@ -2786,7 +2812,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			7YKKg9+qUZRPFmyEIVW0irO9fLLEbc2WJp611Ir09j8=
+			oUg7rgOFw4DtrXK4GM58L1S6YXukxwmyo0p2iG1bXz0=
 			</data>
 		</dict>
 		<key>Resources/PySide6/Qt/translations/qtbase_en.qm</key>
@@ -2871,6 +2897,13 @@
 			<key>hash2</key>
 			<data>
 			5V5LcvpiC+vuUpfKWd/i9JiUoeVE8rdIWxz9iCkonW8=
+			</data>
+		</dict>
+		<key>Resources/PySide6/Qt/translations/qtbase_kk.qm</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			i6tyxFPodInXbMfv/8V+lHy/ojne5Nb6ET97e4y9W4Y=
 			</data>
 		</dict>
 		<key>Resources/PySide6/Qt/translations/qtbase_ko.qm</key>
@@ -2996,10 +3029,10 @@
 			<key>symlink</key>
 			<string>../../Frameworks/PySide6/QtWidgets.abi3.so</string>
 		</dict>
-		<key>Resources/PySide6/libpyside6.abi3.6.11.dylib</key>
+		<key>Resources/PySide6/libpyside6.abi3.6.12.dylib</key>
 		<dict>
 			<key>symlink</key>
-			<string>../../Frameworks/PySide6/libpyside6.abi3.6.11.dylib</string>
+			<string>../../Frameworks/PySide6/libpyside6.abi3.6.12.dylib</string>
 		</dict>
 		<key>Resources/Python</key>
 		<dict>
@@ -4395,7 +4428,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			KoCnD95HpMoGqmR1D5mOl0qaymLE85hrioZiOED/XXI=
+			DBP0zuD9SQwZ9FddfLHcRTgLBhDpwPRdjyW9rvXFy+k=
 			</data>
 		</dict>
 		<key>Resources/icon-windowed.icns</key>
@@ -4410,15 +4443,15 @@
 			<key>symlink</key>
 			<string>../Frameworks/libcrypto.3.dylib</string>
 		</dict>
-		<key>Resources/libpyside6.abi3.6.11.dylib</key>
+		<key>Resources/libpyside6.abi3.6.12.dylib</key>
 		<dict>
 			<key>symlink</key>
-			<string>PySide6/libpyside6.abi3.6.11.dylib</string>
+			<string>PySide6/libpyside6.abi3.6.12.dylib</string>
 		</dict>
-		<key>Resources/libshiboken6.abi3.6.11.dylib</key>
+		<key>Resources/libshiboken6.abi3.6.12.dylib</key>
 		<dict>
 			<key>symlink</key>
-			<string>shiboken6/libshiboken6.abi3.6.11.dylib</string>
+			<string>shiboken6/libshiboken6.abi3.6.12.dylib</string>
 		</dict>
 		<key>Resources/libssl.3.dylib</key>
 		<dict>
@@ -4450,7 +4483,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			zfzZIkMj9CMMP9l6puhY9C1iTM3hP/CCxBIH4YSsg/Q=
+			cOatoqqf0Xffe7WRHnAzXKx/WCFIviNUb7SfCC6PiaM=
 			</data>
 		</dict>
 		<key>Resources/mido-1.3.3.dist-info/REQUESTED</key>
@@ -4485,6 +4518,11 @@
 		<dict>
 			<key>symlink</key>
 			<string>../Frameworks/python3.13</string>
+		</dict>
+		<key>Resources/rtmidi</key>
+		<dict>
+			<key>symlink</key>
+			<string>../Frameworks/rtmidi</string>
 		</dict>
 		<key>Resources/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/INSTALLER</key>
 		<dict>

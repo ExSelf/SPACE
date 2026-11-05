@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import configparser
 import struct
 import time
 import hmac
 import os
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Optional
 
 # Packet type constants
@@ -25,12 +28,34 @@ AUTHENTICATED_SIZE = 242
 AUTH_TAG_SIZE = 8
 COMMAND_UPDATE_STATE = 0x01
 COMMAND_UPDATE_CONSTANTS = 0x02
+SECRETS_INI_PATH = Path(__file__).resolve().parent.parent / "secrets.ini"
+HMAC_KEY_PLACEHOLDER = "REPLACE_WITH_SHARED_KEY_OF_AT_LEAST_32_CHARACTERS"
+
+
+def _secrets_ini_path() -> Path:
+    if not getattr(sys, "frozen", False):
+        return SECRETS_INI_PATH
+
+    executable_directory = Path(sys.executable).resolve().parent
+    candidates = [directory / "secrets.ini" for directory in (executable_directory, *executable_directory.parents)]
+    return next((candidate for candidate in candidates if candidate.is_file()), candidates[0])
 
 
 def get_packet_hmac_key() -> bytes:
     key = os.environ.get("SUN_PACKET_HMAC_KEY")
     if key is None:
-        raise RuntimeError("Set SUN_PACKET_HMAC_KEY to the shared SUN/BEAM key before starting SPACE")
+        parser = configparser.ConfigParser(interpolation=None)
+        secrets_path = _secrets_ini_path()
+        if not secrets_path.is_file():
+            raise RuntimeError(
+                "Set SUN_PACKET_HMAC_KEY or configure it in secrets.ini before starting SPACE"
+            )
+        parser.read(secrets_path, encoding="utf-8")
+        key = parser.get("security", "SUN_PACKET_HMAC_KEY", fallback=None)
+    if key is None or key == HMAC_KEY_PLACEHOLDER:
+        raise RuntimeError(
+            "Replace the SUN_PACKET_HMAC_KEY placeholder in secrets.ini or set the environment variable"
+        )
     key_bytes = key.encode("utf-8")
     if len(key_bytes) < 32:
         raise RuntimeError("SUN_PACKET_HMAC_KEY must be at least 32 bytes")
@@ -279,7 +304,7 @@ def extract_espnow_payload(data: bytes) -> bytes:
     if data is None:
         return b""
 
-    frame = bytes(data).rstrip(b"\r\n")
+    frame = bytes(data)
     if not frame:
         return frame
 
@@ -290,7 +315,11 @@ def extract_espnow_payload(data: bytes) -> bytes:
         if b" " in payload:
             payload = payload.split(b" ", 1)[1]
             payload = payload.lstrip(b" \t")
-        return payload.rstrip(b"\r\n")
+        if len(payload) == PACKET_SIZE + 2 and payload.endswith(b"\r\n"):
+            return payload[:-2]
+        if len(payload) == PACKET_SIZE + 1 and payload.endswith((b"\r", b"\n")):
+            return payload[:-1]
+        return payload
 
     return frame
 

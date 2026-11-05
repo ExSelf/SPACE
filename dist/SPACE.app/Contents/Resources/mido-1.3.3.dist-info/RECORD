@@ -1,7 +1,7 @@
-../../../bin/mido-connect,sha256=MJA1hWMRYHHi064y_ZXLQZR3CVOhism8DYQLqSqgb5s,230
-../../../bin/mido-play,sha256=-MqiTsGlHu6unaln9IaoUdjtryhu9h0FRDbXoDkT2Dw,227
-../../../bin/mido-ports,sha256=cxGhlMJo740PHWSAOeZXjII1dlDN03CoUewLxVL1-wk,228
-../../../bin/mido-serve,sha256=e_H34wrcLbwwfaCMwwBMyElCBGmKktw1Ybwyto21JEQ,228
+../../../bin/mido-connect,sha256=Ie6CvsnprIDHOnlSLeTi57tpmBDFfBIAjnJ5UHidAtA,263
+../../../bin/mido-play,sha256=9b9ogD1fOKuWjw-h8ImXtS6F9gAK8VvySBPqheM1Wg8,260
+../../../bin/mido-ports,sha256=4L1CPgeWP2xgU4BEmOUy0rPFTAjYXOWjD5_fcJcQ1VE,261
+../../../bin/mido-serve,sha256=yG-nkpkfr8VlKOJjUKLOAG9uAiYKaW0_5Qb7JTu4Jkk,261
 mido-1.3.3.dist-info/INSTALLER,sha256=zuuue4knoyJ-UwPPXg8fezS7VCrXJQrAP7zeNuwvFQg,4
 mido-1.3.3.dist-info/LICENSE,sha256=vQOOWtJLjXA5cLUcBwZp6KsNBvTvsAhmUmGwGDr36xw,1078
 mido-1.3.3.dist-info/METADATA,sha256=IGlu7gp5XMAa4RtvwdBJnvqCkstU4xwQAdmrd3l0Z8g,6436

@@ -21,8 +21,9 @@ SUN Nodes (execute commands, send status)
 Every 250-byte packet exchanged over USB serial is authenticated with the
 first 8 bytes of HMAC-SHA-256 over bytes 0-241. SPACE and BEAM use the shared
 `SUN_PACKET_HMAC_KEY`, which must also match SUN's key. Configure it in SPACE's
-environment before launch; do not store the key in source control. The HMAC
-replaces the former timestamp-echo and CRC trailer in bytes 242-249.
+ignored `secrets.ini` file or its environment before launch; do not store the
+key in source control. The HMAC replaces the former timestamp-echo and CRC
+trailer in bytes 242-249.
 
 ### Command Packets (MIDI → SUN)
 
